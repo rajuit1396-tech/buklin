@@ -1,81 +1,151 @@
-﻿# Buklin — on-demand work
+﻿# Buklin — Flutter + Node.js + Neon
 
-Flutter customer and operator app for 5-finger excavator grapple, pickup van,
-and big truck work. Customers request work now; operators accept or decline.
-Status flow: Requested → Accepted → On the way → Working → Completed.
-Customers can cancel while waiting. One active job per customer/operator.
+The active backend is now `backend/`: a Node.js REST/WebSocket API with Neon
+Postgres storage. Flutter no longer uses Supabase. The `supabase/` directory is
+retained only as historical migration material; do not apply it to Neon.
 
-## Local demo
-
-Install Flutter and the Android toolchain:
-https://docs.flutter.dev/platform-integration/android/setup
-
-Run in this folder:
+## Preview in Chrome
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\setup-android.ps1
-flutter run
+C:\flutter\bin\flutter.bat run -d chrome --web-port 8082
 ```
 
-Without backend configuration, a LOCAL DEMO banner is shown. Submit a customer
-request, switch to Operator, go online, and accept it. Change statuses and switch
-back to Customer to see them. Demo data resets when the app restarts.
+Without BACKEND_URL the app runs the labeled, in-memory customer/operator demo.
 
-## Live requests across devices
+## Run with Neon
 
-1. Create a Supabase project and run `supabase/schema.sql` once in its SQL editor.
-2. Enable email/password authentication. Customers can register in the app and
-   confirm their email before signing in.
-3. Create operator accounts through Supabase Auth. From a trusted admin environment,
-   set each operator's app_metadata to include `role: operator` and `service` set
-   to exactly one of the three service names above. Users must sign in again after
-   role changes. Never put an admin/service-role key in the app.
-4. Run with your project URL and public anon key:
+1. Install Node.js LTS (22 or newer).
+2. Create a Neon project. Copy `backend/.env.example` to `backend/.env` and set
+   DATABASE_URL to your Neon Postgres connection string. Keep it private: never
+   put it in Flutter code, a dart-define, GitHub, or chat. Use TLS verification.
+3. From `backend`, run:
 
 ```powershell
-flutter run --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co --dart-define=SUPABASE_ANON_KEY=YOUR_PUBLIC_ANON_KEY
+npm install
+npm run migrate
+npm start
 ```
 
-Supabase Realtime triggers a refreshed job list on database changes, with a
-five-second refresh as a reconnect/stale-visibility fallback. Requests are filtered
-by the operator's equipment category. Atomic server-side acceptance prevents two
-operators claiming the same request. Row-level policies restrict customer data;
-only approved operators in the matching category can read open requests.
-Declines are private to the operator and persisted in the backend.
+4. From the project root:
 
-Reference: https://supabase.com/docs/reference/dart/auth-signinwithpassword
-and https://supabase.com/docs/reference/dart/stream
+```powershell
+C:\flutter\bin\flutter.bat run -d chrome --web-port 8082 --dart-define=BACKEND_URL=http://localhost:3000
+```
 
-## Current scope and limitations
+5. Create customer accounts in the app. To approve an existing account as an
+   operator, run from `backend`:
 
-This is an implementation for an initial foreground work-request flow, not a deployed
-production service. Backend setup has not been performed. GPS proximity matching,
-live map/location tracking, background push notifications, operator names/contact,
-pricing/payments and automatic request expiry are not implemented. Online/offline
-controls the foreground offer view; it is not server-managed operator presence.
-Waiting requests remain open until accepted or cancelled. Accepted jobs currently
-must follow the completion flow; support cancellation is not yet implemented.
+```powershell
+npm run operator -- operator@example.com "Pickup van"
+```
 
-Flutter/Dart are unavailable in this workspace environment, so dependency resolution,
-static analysis, device execution and APK compilation could not be run. The database
-migration also needs validation in your Supabase project before deployment.
+Use exactly `Pickup van`, `Big truck`, or `5-finger excavator grapple`. Sign in
+again as the operator, then go online. Customers cannot grant themselves roles.
+Accounts require passwords of 10–128 characters. Sessions are kept in app memory;
+refreshing the browser requires signing in again. Password recovery and email
+verification are not implemented yet.
 
-## Validation checklist
+## Phone alerts
 
-- Empty/short job details are rejected; all three equipment choices work.
-- Demo: submit, accept, advance all statuses, and inspect customer history.
-- Customer cancellation removes a request from operator offers.
-- Use two real operator accounts to accept the same request simultaneously:
-  exactly one succeeds. A second active job must also be rejected.
-- A customer cannot read another customer's jobs or advance operator statuses.
-- Operators cannot accept another category or change another operator's job.
-- Decline persists after sign-out. Restart restores live jobs from the server.
-- Disconnect/reconnect both devices and verify status reconciliation.
+Set ONESIGNAL_APP_ID and ONESIGNAL_REST_API_KEY in backend/.env. Launch the Android
+app with BACKEND_URL and ONESIGNAL_APP_ID dart defines. Configure Android/FCM in
+OneSignal, enable notification permission in the app, and go online. Keep the API
+server running: its outbox worker retries failed messages up to eight times.
+Monitor notification_outbox for exhausted attempts. No Google/OneSignal credentials
+have been provisioned here. Phone notification delivery remains unverified.
 
-## Build
+The push payload includes the equipment, loading vehicle and offer amount only.
+Exact location and the three-digit store number are returned only to the customer
+or assigned operator after acceptance, never to other operators.
 
-After Android setup: `flutter build apk --debug` (include the same dart defines
-for a live build). APK: `build/app/outputs/flutter-apk/app-debug.apk`.
+## Data and live updates
 
-Generated logo: `assets/buklin-logo.png`; built-in imagegen prompt:
-`assets/logo-prompt.txt`. The logo is embedded in the app, not yet a launcher icon.
+Neon stores users, hashed passwords, hashed session tokens, jobs, fixed loading
+options, offers, private site details, positions, declines and notification outbox.
+Images remain bundled Flutter assets; Neon is used for structured application data.
+The server checks identity and ownership on every API call. Row locks and unique
+indexes prevent double acceptance and multiple active jobs.
+
+Authenticated WebSocket connections receive refresh signals without job contents.
+Flutter then fetches its authorized list. Five-second polling reconciles disconnects;
+location refreshes every three seconds. The WebSocket broadcaster supports one API
+instance; add a shared event bus before scaling to multiple instances. Notifications
+use database locking and provider idempotency for retries.
+
+For phones use a reachable HTTPS API URL, configure HOST for your deployment, and
+set allowed web origins in CORS_ORIGINS. Never expose Postgres credentials to clients.
+Behind a reverse proxy, configure Express trust-proxy and shared rate limiting to
+match your deployment. Complete operator identity verification for OneSignal before
+production. Session and notification retention/cleanup require deployment policy.
+
+## Validation
+
+```powershell
+cd backend
+npm test
+```
+
+Backend tests use embedded Postgres (PGlite), exercising authentication, required
+fields, private-data filtering, competing acceptance, state transitions, locations,
+and logout. Run a real Neon concurrency/load test before production deployment.
+Flutter checks: `flutter test` and `flutter analyze`.
+
+No Neon connection string was supplied, so hosted database migration, deployment,
+and a full two-device test have not been performed. Existing Supabase accounts/data
+are not automatically copied; a separate export/import is needed if any exist.
+
+See WORK_FLOW.md for the customer/operator page flow.
+
+References: [Neon pooling](https://neon.com/docs/connect/connection-pooling),
+[node-postgres TLS](https://node-postgres.com/features/ssl).
+
+Offer amounts must be whole numbers from 100 to 999 Riyal. Run npm run migrate after updating an existing backend. If older offers fall outside this range, migration stops and rolls back without changing those records; reconcile them before retrying.
+
+## Admin panel
+
+Run `npm run migrate` after updating the backend. This adds profile fields and
+admin accounts without deleting existing users. Existing email logins still work;
+new admin-created accounts sign in by username.
+
+To create the first admin, add these values to backend/.env locally:
+
+```dotenv
+ADMIN_NAME=Your full name
+ADMIN_PHONE=Your phone number with country code
+ADMIN_USERNAME=your_admin_username
+ADMIN_PASSWORD=Choose a private password of at least 10 characters
+```
+
+Then run `npm run admin` from backend. Remove ADMIN_PASSWORD from .env afterward.
+No default admin account or password is included. This command requires direct
+server/database access and cannot be invoked by customers through the app.
+
+Sign in with that username and password in the live app. The admin panel can:
+- Create operators or customers with required full name, phone, username and password.
+- Assign operators exactly one machine: 5-finger excavator grapple, Pickup van, or Big truck.
+- Create customers without machine assignment.
+- List and search registered customer/operator accounts (up to 100 per search).
+
+Passwords are hashed server-side and never returned in account listings. Usernames
+are unique and case-insensitive, using 3–40 letters, numbers or underscores. Phone
+numbers require 7–15 digits, optionally with a leading +. Share new credentials with
+the account owner through your chosen private channel; the app does not send them.
+The local demo's Admin panel preview does not create real login accounts.
+
+## Arrival and start OTP
+
+Run npm run migrate to add job_start_codes (and generate missing codes for older
+accepted jobs). After acceptance, only the customer receives the four-digit OTP.
+The operator enters it to start work after selecting Go to work. Codes are consumed
+on successful start; five incorrect attempts cause a one-minute retry delay.
+
+Both Start work and Finished work require an operator GPS point no older than
+30 seconds and within 100 metres of the pinned site. The app gets a fresh position
+before each action; the API independently checks the saved point. Missing, denied,
+stale or distant GPS blocks the action. This checks device-reported GPS, not
+independent proof of physical presence.
+
+Operators receive no new offers while accepted, on the way, or working. The API
+hides open offers and the notification worker excludes busy operators. Notifications
+already delivered before acceptance may remain in the phone notification tray;
+they cannot be accepted while busy. Offers resume after completion if online.

@@ -1,0 +1,7 @@
+Generated with the built-in image_gen tool. Style reference: assets/buklin-logo.png.
+
+Dyna: Create a single square standalone app icon of a Dyna-style light cab-over cargo truck, three-quarter front view, short open flatbed. Match the supplied Buklin reference logo's flat charcoal, white and orange illustration style. Pure white background, centered complete vehicle, ample margins. No letters, brand badges, logo text, other vehicles or objects. This is a loading-vehicle icon for an operator work-order card.
+
+Trailer: Create a single square standalone app icon of a large articulated tractor truck pulling a long open flatbed semi-trailer, three-quarter front view with complete trailer visible. Match the supplied Buklin logo's flat charcoal, white and orange illustration style. Pure white background, complete centered vehicle, ample margins. No letters, brand badges or extra objects. Clearly distinguish this long trailer vehicle from a small rigid Dyna truck. Operator loading-vehicle icon.
+
+Store: Create a single square standalone app icon representing Inside store material loading: a compact warehouse with an open loading doorway and neatly stacked crates visible inside. Match the supplied Buklin reference logo's flat charcoal, white and orange illustration style. Pure white background, centered full building with ample margins. No text, letters, people, brand badges or vehicles. Simple bold recognizable operator work-order icon.

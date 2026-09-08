@@ -1,0 +1,155 @@
+﻿import test from 'node:test';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
+import {PGlite} from '@electric-sql/pglite';
+import request from 'supertest';
+import {createApp} from '../src/app.js';
+
+test('authenticated work flow protects private fields and validates transitions',async()=>{
+ const db=new PGlite();await db.exec(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
+ // A serialized pool adapter for embedded Postgres; production uses pg.Pool.
+ let tail=Promise.resolve();
+ async function lock(){let unlock;const previous=tail;tail=new Promise(r=>unlock=r);await previous;return unlock;}
+ const run=async(sql,args)=>{const r=await db.query(sql,args);return {...r,rowCount:Math.max(r.affectedRows??0,r.rows.length)};};
+ const pool={query:async(sql,args)=>{const done=await lock();try{return await run(sql,args);}finally{done();}},
+   connect:async()=>{const done=await lock();return {query:run,release:done};}};
+ const app=createApp(pool,()=>{},{testing:true});
+ const api=request(app);
+ const account=async(email)=>{const r=await api.post('/auth/register').send({email,password:'StrongPassword123'});assert.equal(r.status,200);return r.body;};
+ try {
+ const customer=await account('customer@example.com');
+ const stranger=await account('stranger@example.com');
+ const operator=await account('operator@example.com');
+ const other=await account('other@example.com');
+ const admin=await account('admin@example.com');
+ await pool.query("update users set role='admin' where id=$1",[admin.user.id]);
+ await pool.query("update users set role='operator',service='Pickup van',online=true where id in ($1,$2)",[operator.user.id,other.user.id]);
+ const body={equipment:'Pickup van',loading:'Dyna',store_number:'007',offered_amount:'250',
+   site_address:'Private pinned work site',work_details:'Pickup van with Dyna loading',lat:24.5,lng:46.7};
+ const post=(path,token,data)=>api.post(path).auth(token,{type:'bearer'}).send(data);
+ const get=(path,token)=>api.get(path).auth(token,{type:'bearer'});
+ const newAccount={name:'Test Operator',phone:'+966501234567',username:'new_operator',password:'NewPassword123',role:'operator',service:'Big truck'};
+ assert.equal((await post('/admin/users',customer.token,newAccount)).status,403);
+ assert.equal((await post('/admin/users',operator.token,newAccount)).status,403);
+ assert.equal((await get('/admin/users',customer.token)).status,403);
+ for(const invalid of [{service:null},{service:'Dyna'},{phone:'abc'},{username:'x'},{password:'short'},{role:'admin'},{role:'customer'}]) {
+   assert.equal((await post('/admin/users',admin.token,{...newAccount,...invalid})).status,400);
+ }
+ for(const [index,service] of ['5-finger excavator grapple','Pickup van','Big truck'].entries()) {
+   const createdUser=await post('/admin/users',admin.token,{...newAccount,username:'machine_'+index,service});
+   assert.equal(createdUser.status,201);assert.equal(createdUser.body.user.service,service);
+   assert.equal(createdUser.body.user.password,undefined);assert.equal(createdUser.body.user.password_hash,undefined);
+ }
+ const customerCreated=await post('/admin/users',admin.token,{...newAccount,role:'customer',service:null,username:'new_customer'});
+ assert.equal(customerCreated.status,201);assert.equal(customerCreated.body.user.service,null);
+ const loggedIn=await api.post('/auth/login').send({email:'NEW_CUSTOMER',password:newAccount.password});
+ assert.equal(loggedIn.status,200);assert.equal(loggedIn.body.user.role,'customer');
+ assert.equal((await post('/admin/users',admin.token,{...newAccount,username:'new_customer'})).status,409);
+ const directory=await get('/admin/users',admin.token);
+ assert.equal(directory.status,200);
+ assert.ok(directory.body.users.every(u=>!('password_hash' in u) && !('password' in u)));
+ for(const invalid of [{store_number:''},{store_number:'12'},{offered_amount:'0'},{offered_amount:'1.234'},
+   {offered_amount:'29'},{offered_amount:'1000'},{offered_amount:'250.50'},{offered_amount:'007'},{loading:'Custom'},{lat:91}]) {
+   assert.equal((await post('/jobs',customer.token,{...body,...invalid})).status,400);
+ }
+ assert.equal((await api.get('/jobs')).status,401);
+ const created=await post('/jobs',customer.token,body);assert.equal(created.status,201);
+ const id=created.body.id;
+ assert.equal((await post('/jobs',customer.token,body)).status,409);
+ const offers=(await get('/jobs',operator.token)).body.jobs;
+ assert.equal(offers[0].store_number,null);assert.equal(offers[0].address,null);
+ assert.equal(offers[0].offered_amount,'250.00');assert.equal(offers[0].site_lat,undefined);
+ assert.equal((await get(`/jobs/${id}/location`,operator.token)).status,404);
+ assert.equal((await get('/jobs',stranger.token)).body.jobs.length,0);
+ const competing=await Promise.all([operator,other].map(u=>post(`/jobs/${id}/action`,u.token,{action:'accept'})));
+ assert.deepEqual(competing.map(r=>r.status).sort(),[200,409]);
+ const winner=competing[0].status===200?operator:other;
+ const loser=winner===operator?other:operator;
+ const accepted=(await get('/jobs',winner.token)).body.jobs[0];
+ assert.equal(accepted.start_otp,null);
+ const customerJob=(await get('/jobs',customer.token)).body.jobs[0];
+ assert.match(customerJob.start_otp,/^[0-9]{4}$/);
+ const otp=customerJob.start_otp;
+ assert.equal(accepted.store_number,'007');assert.equal(accepted.address,body.site_address);
+ assert.equal((await get(`/jobs/${id}/location`,loser.token)).status,404);
+ assert.equal((await post(`/jobs/${id}/action`,loser.token,{action:'cancel'})).status,409);
+ assert.equal((await post(`/jobs/${id}/action`,winner.token,{action:'complete'})).status,409);
+ assert.equal((await api.put(`/jobs/${id}/location`).auth(loser.token,{type:'bearer'}).send({lat:1,lng:2})).status,403);
+ assert.equal((await api.put(`/jobs/${id}/location`).auth(winner.token,{type:'bearer'}).send({lat:24.6,lng:46.8})).status,200);
+ assert.equal((await get(`/jobs/${id}/location`,customer.token)).body.position.lat,24.6);
+ assert.equal((await post(`/jobs/${id}/action`,winner.token,{action:'travel'})).status,200);
+ assert.equal((await post(`/jobs/${id}/action`,winner.token,{action:'start',otp})).status,409);
+ await api.put(`/jobs/${id}/location`).auth(winner.token,{type:'bearer'}).send({lat:body.lat,lng:body.lng});
+ await pool.query("update job_locations set updated_at=now()-interval '1 minute' where job_id=$1",[id]);
+ assert.equal((await post(`/jobs/${id}/action`,winner.token,{action:'start',otp})).status,409);
+ await api.put(`/jobs/${id}/location`).auth(winner.token,{type:'bearer'}).send({lat:body.lat,lng:body.lng});
+ const wrong=otp==='0000'?'0001':'0000';
+ for(let i=0;i<5;i++) assert.equal((await post(`/jobs/${id}/action`,winner.token,{action:'start',otp:wrong})).status,400);
+ assert.equal((await post(`/jobs/${id}/action`,winner.token,{action:'start',otp})).status,429);
+ await pool.query("update job_start_codes set window_started=now()-interval '2 minutes' where job_id=$1",[id]);
+ assert.equal((await post(`/jobs/${id}/action`,winner.token,{action:'start',otp})).status,200);
+ assert.equal((await post(`/jobs/${id}/action`,customer.token,{action:'cancel'})).status,409);
+ assert.equal((await post(`/jobs/${id}/action`,winner.token,{action:'cancel'})).status,409);
+ assert.equal((await get('/jobs',customer.token)).body.jobs[0].start_otp,null);
+ assert.equal((await post(`/jobs/${id}/action`,winner.token,{action:'start',otp})).status,409);
+ const nextJob=await post('/jobs',stranger.token,body);assert.equal(nextJob.status,201);
+ assert.ok((await get('/jobs',winner.token)).body.jobs.every(j=>j.status!=='requested'));
+ assert.equal((await post(`/jobs/${nextJob.body.id}/action`,winner.token,{action:'accept'})).status,409);
+ await api.put(`/jobs/${id}/location`).auth(winner.token,{type:'bearer'}).send({lat:1,lng:2});
+ assert.equal((await post(`/jobs/${id}/action`,winner.token,{action:'complete'})).status,409);
+ await api.put(`/jobs/${id}/location`).auth(winner.token,{type:'bearer'}).send({lat:body.lat,lng:body.lng});
+ assert.equal((await post(`/jobs/${id}/action`,winner.token,{action:'complete'})).status,200);
+ assert.equal((await get('/jobs',customer.token)).body.balance,-4);
+ assert.equal((await get('/jobs',winner.token)).body.balance,-4);
+ assert.equal((await get('/jobs',stranger.token)).body.balance,0);
+ assert.equal((await post(`/jobs/${id}/action`,winner.token,{action:'complete'})).status,409);
+ assert.equal((await get('/jobs',customer.token)).body.balance,-4);
+ assert.equal((await get('/jobs',winner.token)).body.balance,-4);
+ assert.ok((await get('/jobs',winner.token)).body.jobs.some(j=>j.id===nextJob.body.id));
+ assert.equal((await api.put(`/jobs/${id}/location`).auth(winner.token,{type:'bearer'}).send({lat:1,lng:2})).status,403);
+ assert.equal((await get(`/jobs/${id}/location`,customer.token)).status,404);
+ await post('/auth/logout',customer.token,{});
+ assert.equal((await post(`/jobs/${nextJob.body.id}/action`,winner.token,{action:'accept'})).status,200);
+ assert.equal((await post(`/jobs/${nextJob.body.id}/action`,stranger.token,{action:'cancel'})).status,200);
+ const blockedCustomer=(await get('/jobs',stranger.token)).body;
+ assert.ok(new Date(blockedCustomer.blocked_until)-Date.now()>71*3600000);
+ assert.equal(blockedCustomer.balance,0);
+ assert.equal((await post('/jobs',stranger.token,body)).status,403);
+ await pool.query("update users set blocked_until=now()-interval '1 second' where id=$1",[stranger.user.id]);
+ const another=await post('/jobs',stranger.token,body);assert.equal(another.status,201);
+ assert.equal((await post(`/jobs/${another.body.id}/action`,winner.token,{action:'accept'})).status,200);
+ assert.equal((await post(`/jobs/${another.body.id}/action`,winner.token,{action:'travel'})).status,200);
+ assert.equal((await post(`/jobs/${another.body.id}/action`,winner.token,{action:'cancel'})).status,200);
+ const blockedOperator=(await get('/jobs',winner.token)).body;
+ assert.ok(new Date(blockedOperator.blocked_until)-Date.now()>4.9*3600000);
+ assert.equal(blockedOperator.balance,-4);
+ assert.equal((await api.put('/availability').auth(winner.token,{type:'bearer'}).send({available:true})).status,403);
+ const retry=await post('/jobs',stranger.token,body);assert.equal(retry.status,201);
+ assert.ok((await get('/jobs',winner.token)).body.jobs.every(j=>j.status!=='requested'));
+ assert.notEqual((await post(`/jobs/${retry.body.id}/action`,winner.token,{action:'accept'})).status,200);
+ await pool.query("update users set blocked_until=now()-interval '1 second' where id=$1",[winner.user.id]);
+ assert.equal((await api.put('/availability').auth(winner.token,{type:'bearer'}).send({available:true})).status,200);
+ assert.equal((await post(`/jobs/${retry.body.id}/action`,winner.token,{action:'accept'})).status,200);
+ assert.equal((await get('/jobs',customer.token)).status,401);
+ const adjustment={id:randomUUID(),amount:4,reason:'Payment received'};
+ const balancePath=`/admin/users/${winner.user.id}/balance`;
+ assert.equal((await post(balancePath,stranger.token,adjustment)).status,403);
+ assert.equal((await post(balancePath,winner.token,adjustment)).status,403);
+ assert.equal((await post(balancePath,admin.token,adjustment)).status,200);
+ assert.equal((await post(balancePath,admin.token,adjustment)).status,200);
+ assert.equal((await get('/jobs',winner.token)).body.balance,0);
+ assert.equal((await post(balancePath,admin.token,{...adjustment,amount:5})).status,409);
+ assert.equal((await post(balancePath,admin.token,{id:randomUUID(),amount:-2,reason:'Correction'})).status,200);
+ assert.equal((await get('/jobs',winner.token)).body.balance,-2);
+ assert.equal((await get(balancePath,admin.token)).body.entries.length,3);
+ assert.equal((await get(balancePath,stranger.token)).status,403);
+ assert.equal((await post(`/admin/users/${customer.user.id}/balance`,admin.token,{id:randomUUID(),amount:4,reason:'Customer payment'})).status,200);
+ assert.equal((await get('/admin/users',admin.token)).body.users.find(u=>u.id===customer.user.id).balance,0);
+ await pool.query("update users set blocked_until=now()+interval '5 hours' where id=$1",[winner.user.id]);
+ assert.equal((await post(`/admin/users/${winner.user.id}/clear-restriction`,stranger.token,{})).status,403);
+ assert.equal((await post(`/admin/users/${winner.user.id}/clear-restriction`,admin.token,{})).status,200);
+ assert.equal((await get('/jobs',winner.token)).body.blocked_until,null);
+ }finally{await db.close();}
+});
+

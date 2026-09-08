@@ -14,6 +14,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Android project generation failed.' }
 $manifestPath = Join-Path $PSScriptRoot 'android\app\src\main\AndroidManifest.xml'
 [xml]$manifest = Get-Content -LiteralPath $manifestPath -Raw
 $androidNamespace = 'http://schemas.android.com/apk/res/android'
+$manifest.manifest.application.SetAttribute('allowBackup', $androidNamespace, 'false')
 $internetPermission = @($manifest.manifest.'uses-permission') | Where-Object {
     $_ -and $_.GetAttribute('name', $androidNamespace) -eq 'android.permission.INTERNET'
 }
@@ -23,6 +24,20 @@ if (-not $internetPermission) {
     $manifest.manifest.PrependChild($permission) | Out-Null
     $manifest.Save($manifestPath)
 }
+
+foreach ($permissionName in @('android.permission.ACCESS_FINE_LOCATION',
+    'android.permission.ACCESS_COARSE_LOCATION', 'android.permission.POST_NOTIFICATIONS',
+    'android.permission.FOREGROUND_SERVICE', 'android.permission.FOREGROUND_SERVICE_LOCATION')) {
+    $found = @($manifest.manifest.'uses-permission') | Where-Object {
+        $_ -and $_.GetAttribute('name', $androidNamespace) -eq $permissionName
+    }
+    if (-not $found) {
+        $permission = $manifest.CreateElement('uses-permission')
+        $permission.SetAttribute('name', $androidNamespace, $permissionName)
+        $manifest.manifest.PrependChild($permission) | Out-Null
+    }
+}
+$manifest.Save($manifestPath)
 
 flutter pub get
 if ($LASTEXITCODE -ne 0) { throw 'Dependency setup failed.' }
