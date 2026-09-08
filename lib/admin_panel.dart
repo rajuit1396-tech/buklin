@@ -175,7 +175,7 @@ class _AdminPanelState extends State<AdminPanel> {
           leading:Icon(u['role']=='operator'?Icons.engineering:Icons.person_outline),
           title:Text(u['name'] ?? u['username'] ?? u['email'] ?? 'Account'),
           subtitle:Text('${u['role']} • ${u['username'] ?? u['email'] ?? ''}\n${u['phone'] ?? ''}'
-            '${u['role']=='operator'?'\nMachine: ${u['service']}':''}\nBalance: (${u['balance'] ?? 0}) Riyal'),isThreeLine:true),
+            '${u['role']=='operator'?'\nMachine: ${u['service']}':''}\nBalance: ${u['balance'] ?? 0} Riyal'),isThreeLine:true),
           if (u['blocked_until'] != null) Padding(padding: const EdgeInsets.all(8), child: Text('Restricted until ${u['blocked_until']}')),
           Wrap(spacing: 8, children: [
             TextButton(onPressed: busy ? null : () => adjustBalance(u), child: const Text('Manage balance')),

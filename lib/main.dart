@@ -119,6 +119,8 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
   List<Map<String, dynamic>> jobs = [];
   int selected = 0;
   int balance = 0;
+  int get availableBalance => live ? balance
+    : balance - 4 * jobs.where((j) => j['status'] == 'completed').length;
   DateTime? blockedUntil;
   final demoBlocks = <bool, DateTime>{};
   DateTime? get restrictionEnd => live ? blockedUntil : demoBlocks[operator];
@@ -345,9 +347,10 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
               icon: const Icon(Icons.admin_panel_settings_outlined), label: const Text('Admin panel preview')),
             Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(
               crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Your balance: (${live ? balance : -4 * jobs.where((j) => j['status'] == 'completed').length}) Riyal',
+                Text('Your balance: $availableBalance Riyal',
                   style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                const Text('You owe 4 Riyal for each completed job.'),
+                Text(availableBalance < 0 ? '${-availableBalance} Riyal to pay' : 'Available money'),
+                const Text('4 Riyal is deducted when each job is completed.'),
               ]))),
             if (restricted) Padding(padding: const EdgeInsets.all(16),
               child: Text('Work paused after cancellation. You can ${operator ? 'accept work' : 'make new requests'} again after ${restrictionEnd!.toLocal()}.')),

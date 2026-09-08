@@ -150,6 +150,19 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal((await post(`/admin/users/${winner.user.id}/clear-restriction`,stranger.token,{})).status,403);
  assert.equal((await post(`/admin/users/${winner.user.id}/clear-restriction`,admin.token,{})).status,200);
  assert.equal((await get('/jobs',winner.token)).body.blocked_until,null);
+ // Available funds pay the completion fee before the balance becomes debt.
+ assert.equal((await post(balancePath,admin.token,{id:randomUUID(),amount:22,reason:'Wallet top up'})).status,200);
+ assert.equal((await post(`/admin/users/${stranger.user.id}/balance`,admin.token,{id:randomUUID(),amount:20,reason:'Wallet top up'})).status,200);
+ assert.equal((await get('/jobs',winner.token)).body.balance,20);
+ assert.equal((await get('/jobs',stranger.token)).body.balance,20);
+ const finalJob=retry.body.id;
+ await api.put(`/jobs/${finalJob}/location`).auth(winner.token,{type:'bearer'}).send({lat:body.lat,lng:body.lng});
+ assert.equal((await post(`/jobs/${finalJob}/action`,winner.token,{action:'travel'})).status,200);
+ const finalOtp=(await get('/jobs',stranger.token)).body.jobs.find(j=>j.id===finalJob).start_otp;
+ assert.equal((await post(`/jobs/${finalJob}/action`,winner.token,{action:'start',otp:finalOtp})).status,200);
+ assert.equal((await post(`/jobs/${finalJob}/action`,winner.token,{action:'complete'})).status,200);
+ assert.equal((await get('/jobs',winner.token)).body.balance,16);
+ assert.equal((await get('/jobs',stranger.token)).body.balance,16);
  }finally{await db.close();}
 });
 
