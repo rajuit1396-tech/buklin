@@ -1,0 +1,17 @@
+name: buklin
+description: On-demand equipment and transport work requests.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  supabase_flutter: ^2.8.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/buklin-logo.png
