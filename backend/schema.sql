@@ -58,3 +58,39 @@ create table if not exists balance_adjustments (
  reason text not null check(length(reason) between 3 and 300),
  created_at timestamptz not null default now()
 );
+alter table balance_adjustments add column if not exists kind text not null default 'adjustment'
+ check(kind in ('payment','adjustment'));
+create table if not exists activity_log (
+ id bigserial primary key,
+ user_id uuid references users(id),
+ job_id uuid references jobs(id),
+ description text not null,
+ created_at timestamptz not null default now()
+);
+create or replace function log_work_activity() returns trigger language plpgsql as $$
+begin
+ if TG_TABLE_NAME='jobs' then
+  if TG_OP='INSERT' then
+   insert into activity_log(user_id,job_id,description) values(new.customer_id,new.id,'Work requested');
+  elsif new.status is distinct from old.status then
+   insert into activity_log(user_id,job_id,description) values(new.customer_id,new.id,'Work status: ' || new.status);
+  end if;
+ elsif TG_TABLE_NAME='users' then
+  if TG_OP='INSERT' then
+   insert into activity_log(user_id,description) values(new.id,'Account created: ' || new.role);
+  else
+   if new.online is distinct from old.online then
+    insert into activity_log(user_id,description) values(new.id,case when new.online then 'Operator online' else 'Operator offline' end);
+   end if;
+   if new.blocked_until is distinct from old.blocked_until then
+    insert into activity_log(user_id,description) values(new.id,case when new.blocked_until is null then 'Restriction cleared' else 'Work restriction updated' end);
+   end if;
+  end if;
+ elsif TG_TABLE_NAME='balance_adjustments' then
+  insert into activity_log(user_id,description) values(new.user_id,new.kind || ': ' || new.amount || ' Riyal — ' || new.reason);
+ end if;
+ return new;
+end $$;
+create or replace trigger jobs_activity after insert or update on jobs for each row execute function log_work_activity();
+create or replace trigger users_activity after insert or update on users for each row execute function log_work_activity();
+create or replace trigger payments_activity after insert on balance_adjustments for each row execute function log_work_activity();

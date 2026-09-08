@@ -7,7 +7,6 @@ import {randomBytes,randomUUID,randomInt} from 'node:crypto';
 import {hasArrived} from './arrival.js';
 import {authenticate,hashPassword,checkPassword,tokenHash} from './auth.js';
 import {adminAccount} from './account-validation.js';
-const credentials = z.object({email:z.email().max(254).transform(v=>v.toLowerCase()),password:z.string().min(10).max(128)});
 const point = z.object({lat:z.number().min(-90).max(90),lng:z.number().min(-180).max(180)});
 const requestSchema = point.extend({equipment:z.enum(['5-finger excavator grapple','Pickup van','Big truck']),
  loading:z.enum(['Dyna','Trailer','Inside store']),store_number:z.string().regex(/^[0-9]{3}$/),
@@ -35,10 +34,7 @@ export function createApp(pool, notify=()=>{}, options={}) {
      role:user.role,service:user.service,online:user.online}});
  }
  app.post('/auth/register',authLimit,async(req,res)=>{
-   const body=credentials.parse(req.body), id=randomUUID();
-   const hash=await hashPassword(body.password);
-   const {rows}=await pool.query('insert into users(id,email,password_hash) values($1,$2,$3) returning *',[id,body.email,hash]);
-   await session(res,rows[0]);
+   fail(403,'Self-registration is disabled. Contact the admin to create your account.');
  });
  app.post('/auth/login',authLimit,async(req,res)=>{
    const body=z.object({email:z.string().trim().min(3).max(254).toLowerCase(),password:z.string().min(10).max(128)}).parse(req.body);
@@ -59,26 +55,48 @@ export function createApp(pool, notify=()=>{}, options={}) {
  });
  app.get('/admin/users',async(req,res)=>{
    const search=z.string().max(100).parse(req.query.search ?? '');
+   const offset=z.coerce.number().int().min(0).max(10000000).parse(req.query.offset ?? 0);
    const {rows}=await pool.query(`select id,name,phone,username,email,role,service,online,blocked_until,
      (coalesce((select sum(amount) from work_charges where user_id=users.id),0)+
       coalesce((select sum(amount) from balance_adjustments where user_id=users.id),0))::integer as balance from users
      where role in ('customer','operator') and
      (coalesce(name,'') ilike $1 or coalesce(username,'') ilike $1 or coalesce(phone,'') ilike $1 or coalesce(email,'') ilike $1)
-     order by coalesce(name,username,email),id limit 100`,['%'+search+'%']);
-   res.json({users:rows});
+     order by coalesce(name,username,email),id limit 101 offset $2`,['%'+search+'%',offset]);
+   res.json({users:rows.slice(0,100),has_more:rows.length>100});
+ });
+ app.get('/admin/dashboard',async(req,res)=>{
+   const offset=z.coerce.number().int().min(0).max(10000000).parse(req.query.offset ?? 0);
+   const {rows:totals}=await pool.query(`with balances as (
+     select u.id,coalesce((select sum(amount) from work_charges where user_id=u.id),0)+
+       coalesce((select sum(amount) from balance_adjustments where user_id=u.id),0) as balance
+     from users u where role in ('customer','operator'))
+     select (select count(*) from users where role='customer') as customers,
+       (select count(*) from users where role='operator') as operators,
+       (select count(*) from jobs where status in ('requested','accepted','on_the_way','working')) as active_jobs,
+       (select count(*) from jobs where status='completed') as completed_jobs,
+       (select coalesce(-sum(amount),0) from work_charges) as fees,
+       (select coalesce(sum(amount),0) from balance_adjustments where kind='payment') as received,
+       (select coalesce(sum(-balance),0) from balances where balance<0) as owed,
+       (select coalesce(sum(balance),0) from balances where balance>0) as credit`);
+   const {rows:activities}=await pool.query(`select a.*,coalesce(u.name,u.username,u.email) as account_name,
+     u.role,coalesce(o.name,o.username,o.email) as operator_name from activity_log a
+     left join users u on u.id=a.user_id left join jobs j on j.id=a.job_id
+     left join users o on o.id=j.operator_id order by a.id desc limit 101 offset $1`,[offset]);
+   res.json({totals:totals[0],activities:activities.slice(0,100),has_more:activities.length>100});
  });
  app.post('/admin/users/:id/balance',async(req,res)=>{
    const userId=z.uuid().parse(req.params.id);
    const b=z.object({id:z.uuid(),amount:z.number().int().min(-1000000).max(1000000).refine(v=>v!==0),
-     reason:z.string().trim().min(3).max(300)}).parse(req.body);
+     reason:z.string().trim().min(3).max(300),kind:z.enum(['payment','adjustment']).default('adjustment')}).parse(req.body);
+   if(b.kind==='payment' && b.amount<=0) fail(400,'A payment must add money');
    await transaction(pool,async c=>{
      const target=await c.query("select id from users where id=$1 and role in ('customer','operator')",[userId]);
      if(!target.rowCount) fail(404,'Account unavailable');
-     await c.query('insert into balance_adjustments(id,user_id,admin_id,amount,reason) values($1,$2,$3,$4,$5) on conflict(id) do nothing',
-       [b.id,userId,req.user.id,b.amount,b.reason]);
+     await c.query('insert into balance_adjustments(id,user_id,admin_id,amount,reason,kind) values($1,$2,$3,$4,$5,$6) on conflict(id) do nothing',
+       [b.id,userId,req.user.id,b.amount,b.reason,b.kind]);
      const previous=await c.query('select * from balance_adjustments where id=$1',[b.id]);
      const p=previous.rows[0];
-     if(p.user_id!==userId || p.admin_id!==req.user.id || p.amount!==b.amount || p.reason!==b.reason) fail(409,'Adjustment reference already used');
+     if(p.user_id!==userId || p.admin_id!==req.user.id || p.amount!==b.amount || p.reason!==b.reason || p.kind!==b.kind) fail(409,'Adjustment reference already used');
    });
    notify();res.json({ok:true});
  });

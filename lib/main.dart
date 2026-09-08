@@ -370,11 +370,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
       await db.login(email.text.trim(), password.text);
       password.clear(); restoreWork(); connect();
     }),
-    TextButton(onPressed: busy ? null : () => perform(() async {
-      await db.login(email.text.trim(), password.text, register: true);
-      password.clear(); restoreWork(); connect();
-    }), child: const Text('Create customer account')),
-    const Text('Operators sign in with an approved operator account.'),
+    const Text('Contact the admin to create your customer or operator account.'),
   ];
   List<Widget> customerView(List<Map<String, dynamic>> active) => [
     if (active.isEmpty) ...[

@@ -5,6 +5,7 @@ import {readFile} from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
 import request from 'supertest';
 import {createApp} from '../src/app.js';
+import {hashPassword} from '../src/auth.js';
 
 test('authenticated work flow protects private fields and validates transitions',async()=>{
  const db=new PGlite();await db.exec(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
@@ -16,8 +17,12 @@ test('authenticated work flow protects private fields and validates transitions'
    connect:async()=>{const done=await lock();return {query:run,release:done};}};
  const app=createApp(pool,()=>{},{testing:true});
  const api=request(app);
- const account=async(email)=>{const r=await api.post('/auth/register').send({email,password:'StrongPassword123'});assert.equal(r.status,200);return r.body;};
+ const account=async(email)=>{
+   await pool.query('insert into users(id,email,password_hash) values($1,$2,$3)',[randomUUID(),email,await hashPassword('StrongPassword123')]);
+   const r=await api.post('/auth/login').send({email,password:'StrongPassword123'});assert.equal(r.status,200);return r.body;
+ };
  try {
+ assert.equal((await api.post('/auth/register').send({email:'blocked@example.com',password:'StrongPassword123'})).status,403);
  const customer=await account('customer@example.com');
  const stranger=await account('stranger@example.com');
  const operator=await account('operator@example.com');
@@ -163,6 +168,17 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal((await post(`/jobs/${finalJob}/action`,winner.token,{action:'complete'})).status,200);
  assert.equal((await get('/jobs',winner.token)).body.balance,16);
  assert.equal((await get('/jobs',stranger.token)).body.balance,16);
+ assert.equal((await get('/admin/dashboard',stranger.token)).status,403);
+ assert.equal((await get('/admin/dashboard',winner.token)).status,403);
+ assert.equal((await post(balancePath,admin.token,{id:randomUUID(),amount:7,reason:'Cash received',kind:'payment'})).status,200);
+ assert.equal((await post(balancePath,admin.token,{id:randomUUID(),amount:3,reason:'Courtesy credit',kind:'adjustment'})).status,200);
+ const dashboard=(await get('/admin/dashboard',admin.token)).body;
+ assert.equal(Number(dashboard.totals.received),7);
+ assert.equal(Number(dashboard.totals.fees),16);
+ assert.equal(Number(dashboard.totals.completed_jobs),2);
+ assert.ok(dashboard.activities.some(a=>a.description==='Work status: completed'));
+ assert.ok(dashboard.activities.some(a=>a.description.includes('Cash received')));
+ assert.equal((await post(balancePath,admin.token,{id:randomUUID(),amount:-3,reason:'Invalid payment',kind:'payment'})).status,400);
  }finally{await db.close();}
 });
 

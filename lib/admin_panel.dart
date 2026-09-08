@@ -2,6 +2,7 @@
 import 'package:flutter/services.dart';
 import 'backend_api.dart';
 import 'dart:math';
+import 'dart:async';
 
 const adminMachines = ['5-finger excavator grapple', 'Pickup van', 'Big truck'];
 class AdminPanel extends StatefulWidget {
@@ -20,14 +21,31 @@ class _AdminPanelState extends State<AdminPanel> {
   String? machine, message;
   bool busy = false, showPassword = false;
   List<Map<String,dynamic>> users = [];
+  Map<String,dynamic> totals = {};
+  List<Map<String,dynamic>> activities = [];
+  int activityOffset = 0;
+  int accountOffset = 0;
+  bool moreAccounts = false;
+  bool moreActivities = false;
+  Timer? refreshTimer;
   BackendApi get api => BackendApi.instance;
   @override
-  void initState() { super.initState(); if (!widget.demo) load(); }
+  void initState() { super.initState(); if (!widget.demo) {
+    load();
+    refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) { if (!busy) load(); });
+  } }
   Future<void> load() async {
     setState(() => busy = true);
     try {
-      final result = await api.call('GET', '/admin/users?search=${Uri.encodeQueryComponent(search.text.trim())}');
-      if (mounted) setState(() => users = List<Map<String,dynamic>>.from(result['users']));
+      final result = await api.call('GET', '/admin/users?search=${Uri.encodeQueryComponent(search.text.trim())}&offset=$accountOffset');
+      final dashboard = await api.call('GET', '/admin/dashboard?offset=$activityOffset');
+      if (mounted) setState(() {
+        users = List<Map<String,dynamic>>.from(result['users']);
+        moreAccounts = result['has_more'] == true;
+        totals = Map<String,dynamic>.from(dashboard['totals']);
+        activities = List<Map<String,dynamic>>.from(dashboard['activities']);
+        moreActivities = dashboard['has_more'] == true;
+      });
     } on ApiException catch(e) { if (mounted) setState(() => message = e.message); }
     catch (_) { if (mounted) setState(() => message = 'Could not load accounts. Try again.'); }
     finally { if (mounted) setState(() => busy = false); }
@@ -62,12 +80,15 @@ class _AdminPanelState extends State<AdminPanel> {
     final amount = TextEditingController(), reason = TextEditingController();
     final key = GlobalKey<FormState>();
     bool credit = true;
+    bool payment = true;
     final approved = await showDialog<bool>(context: context, builder: (context) => StatefulBuilder(
       builder: (context, update) => AlertDialog(title: Text('Balance: ${user['name'] ?? user['username']}'),
         content: Form(key: key, child: Column(mainAxisSize: MainAxisSize.min, children: [
           Text('Current balance: ${user['balance'] ?? 0} Riyal'),
           SwitchListTile(title: Text(credit ? 'Add money / payment' : 'Deduct money'), value: credit,
             onChanged: (value) => update(() => credit = value)),
+          if (credit) CheckboxListTile(title: const Text('Payment actually received'), value: payment,
+            onChanged: (value) => update(() => payment = value ?? false)),
           TextFormField(controller: amount, keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly], maxLength: 7,
             decoration: const InputDecoration(labelText: 'Amount in Riyal'),
@@ -88,7 +109,8 @@ class _AdminPanelState extends State<AdminPanel> {
           user['balance'] = (user['balance'] ?? 0) + value;
           (user['entries'] ??= <Map<String,dynamic>>[]).insert(0, {'amount': value, 'reason': reason.text.trim()});
         } else {
-          await api.call('POST', '/admin/users/${user['id']}/balance', {'id': id, 'amount': value, 'reason': reason.text.trim()});
+          await api.call('POST', '/admin/users/${user['id']}/balance', {'id': id, 'amount': value,
+            'reason': reason.text.trim(), 'kind': credit && payment ? 'payment' : 'adjustment'});
         }
       });
     }
@@ -116,7 +138,7 @@ class _AdminPanelState extends State<AdminPanel> {
     });
   }
   @override
-  void dispose() { for (final c in [name,phone,username,password,search]) { c.dispose(); } super.dispose(); }
+  void dispose() { refreshTimer?.cancel(); for (final c in [name,phone,username,password,search]) { c.dispose(); } super.dispose(); }
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Buklin Admin'), actions: [
@@ -133,6 +155,29 @@ class _AdminPanelState extends State<AdminPanel> {
           child: Text('ADMIN PREVIEW • Accounts exist only on this screen. Use an admin login with the live backend to save real accounts.'))),
         if (busy) const LinearProgressIndicator(),
         if (message != null) Padding(padding:const EdgeInsets.symmetric(vertical:12),child:Text(message!)),
+        const Text('My wallet', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+        Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Payments received: ${totals['received'] ?? 0} Riyal', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            Text('Work fees charged: ${totals['fees'] ?? 0} Riyal'),
+            Text('Money still owed: ${totals['owed'] ?? 0} Riyal'),
+            Text('Customer and operator available funds: ${totals['credit'] ?? 0} Riyal'),
+            const Text('Payments recorded by admin. This is not a bank balance or automatic money transfer.'),
+          ]))),
+        Text('Customers: ${totals['customers'] ?? 0} • Operators: ${totals['operators'] ?? 0}'),
+        Text('Active work: ${totals['active_jobs'] ?? 0} • Completed: ${totals['completed_jobs'] ?? 0}'),
+        ExpansionTile(title: const Text('Customer and operator activity'), children: [
+          if (activities.isEmpty) const ListTile(title: Text('No activity recorded yet.')),
+          ...activities.map((a) => ListTile(title: Text(a['description']), subtitle: Text(
+            '${a['account_name'] ?? 'Account'} • ${a['role'] ?? ''}\n${a['created_at']}'
+            '${a['operator_name'] == null ? '' : '\nOperator: ${a['operator_name']}'}'
+            '${a['job_id'] == null ? '' : '\nWork: ${a['job_id']}'}'))),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            TextButton(onPressed: busy || activityOffset == 0 ? null : () { activityOffset -= 100; load(); }, child: const Text('Newer')),
+            TextButton(onPressed: busy || !moreActivities ? null : () { activityOffset += 100; load(); }, child: const Text('Older')),
+          ]),
+        ]),
+        const SizedBox(height: 24),
         const Text('Register an account',style:TextStyle(fontSize:28,fontWeight:FontWeight.bold)),
         const SizedBox(height:16),
         SegmentedButton<String>(segments:const [
@@ -168,14 +213,14 @@ class _AdminPanelState extends State<AdminPanel> {
         const SizedBox(height:32),
         const Text('Registered accounts',style:TextStyle(fontSize:24,fontWeight:FontWeight.bold)),
         if (!widget.demo) Padding(padding:const EdgeInsets.symmetric(vertical:16),child:TextField(controller:search,
-          onSubmitted:busy?null:(_)=>load(),decoration:InputDecoration(labelText:'Search name, phone or username',
-            suffixIcon:IconButton(onPressed:busy?null:load,icon:const Icon(Icons.search))))),
+          onSubmitted:busy?null:(_) { accountOffset=0; load(); },decoration:InputDecoration(labelText:'Search name, phone or username',
+            suffixIcon:IconButton(onPressed:busy?null:() { accountOffset=0; load(); },icon:const Icon(Icons.search))))),
         if(users.isEmpty) const Padding(padding:EdgeInsets.all(16),child:Text('No accounts to display.')),
         ...users.map((u)=>Card(child:Column(children: [ListTile(
           leading:Icon(u['role']=='operator'?Icons.engineering:Icons.person_outline),
           title:Text(u['name'] ?? u['username'] ?? u['email'] ?? 'Account'),
           subtitle:Text('${u['role']} • ${u['username'] ?? u['email'] ?? ''}\n${u['phone'] ?? ''}'
-            '${u['role']=='operator'?'\nMachine: ${u['service']}':''}\nBalance: ${u['balance'] ?? 0} Riyal'),isThreeLine:true),
+            '${u['role']=='operator'?'\nMachine: ${u['service']} • ${u['online'] == true ? 'Online' : 'Offline'}':''}\nBalance: ${u['balance'] ?? 0} Riyal'),isThreeLine:true),
           if (u['blocked_until'] != null) Padding(padding: const EdgeInsets.all(8), child: Text('Restricted until ${u['blocked_until']}')),
           Wrap(spacing: 8, children: [
             TextButton(onPressed: busy ? null : () => adjustBalance(u), child: const Text('Manage balance')),
@@ -186,6 +231,10 @@ class _AdminPanelState extends State<AdminPanel> {
             }), child: const Text('Clear restriction')),
           ]),
         ]))),
+        if (!widget.demo) Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          TextButton(onPressed: busy || accountOffset == 0 ? null : () { accountOffset -= 100; load(); }, child: const Text('Previous accounts')),
+          TextButton(onPressed: busy || !moreAccounts ? null : () { accountOffset += 100; load(); }, child: const Text('More accounts')),
+        ]),
       ])))),
   );
 }
