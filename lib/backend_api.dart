@@ -41,8 +41,8 @@ class BackendApi {
       return data;
     } finally {client.close();}
   }
-  Future<void> login(String email,String password,{bool register=false}) async {
-    final result=await call('POST',register?'/auth/register':'/auth/login',{'email':email,'password':password});
+  Future<void> login(String email,String password,{bool register=false, bool adminOnly=false}) async {
+    final result=await call('POST',register?'/auth/register':'/auth/login',{'email':email,'password':password, if(adminOnly) 'admin_only':true});
     token=result['token'];user=Map<String,dynamic>.from(result['user']);
     await storage.write(key: sessionKey, value: jsonEncode({'token': token, 'user': user}));
   }

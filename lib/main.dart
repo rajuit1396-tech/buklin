@@ -10,6 +10,7 @@ import 'work_location.dart';
 import 'site_picker.dart';
 import 'work_alerts.dart';
 import 'admin_panel.dart';
+import 'admin_login.dart';
 
 const services = ['5-finger excavator grapple', 'Pickup van', 'Big truck'];
 const serviceImages = ['assets/grapple.png', 'assets/pickup.png', 'assets/truck.png'];
@@ -343,8 +344,8 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                 ButtonSegment(value: true, label: Text('Operator'))], selected: {operator},
               onSelectionChanged: busy ? null : (s) => setState(() => operator = s.first))),
             if (!live) TextButton.icon(onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => const AdminPanel(demo: true))),
-              icon: const Icon(Icons.admin_panel_settings_outlined), label: const Text('Admin panel preview')),
+              builder: (_) => const AdminLogin())),
+              icon: const Icon(Icons.admin_panel_settings_outlined), label: const Text('Admin panel')),
             Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(
               crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('Your balance: $availableBalance Riyal',

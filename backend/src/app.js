@@ -43,7 +43,7 @@ export function createApp(pool, notify=()=>{}, options={}) {
  app.post('/auth/login',authLimit,async(req,res)=>{
    const body=z.object({email:z.string().trim().min(3).max(254).toLowerCase(),password:z.string().min(10).max(128)}).parse(req.body);
    const {rows}=await pool.query('select * from users where email=$1 or username=$1',[body.email]);
-   if (!rows[0] || !await checkPassword(body.password,rows[0].password_hash)) fail(401,'Invalid username or password');
+   if (!rows[0] || (req.body.admin_only === true && rows[0].role !== 'admin') || !await checkPassword(body.password,rows[0].password_hash)) fail(401,'Invalid username or password');
    await session(res,rows[0]);
  });
  app.use(async(req,_res,next)=>{
