@@ -368,8 +368,14 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
     }
     if (coordinateError(latitude.text, 90) != null ||
         coordinateError(longitude.text, 180) != null) {
-      setState(() => message = 'Choose your work location on the map first.');
-      return;
+      try {
+        final position = await currentPosition();
+        latitude.text = position.latitude.toString();
+        longitude.text = position.longitude.toString();
+        if (mounted) setState(() {});
+      } catch (error) {
+        throw ApiException(error.toString().replaceFirst('Exception: ', ''));
+      }
     }
     address.text = 'Pinned work site: ${latitude.text}, ${longitude.text}';
     details.text =
@@ -866,6 +872,10 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
           ),
           const SizedBox(height: 16),
           button('Search for an operator', request),
+          const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                  'Your exact phone GPS location is captured automatically when you search.')),
         ],
       ];
   List<Widget> operatorView(List<Map<String, dynamic>> active) {
