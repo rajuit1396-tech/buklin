@@ -1,0 +1,10 @@
+Mode: built-in imagegen. Reference: assets/buklin-logo.png.
+Outputs: assets/grapple.png, assets/pickup.png, assets/truck.png.
+
+Prompt template (one generation per subject):
+Extract SUBJECT from the supplied Buklin logo into a standalone square equipment icon. Preserve its recognizable shape, charcoal, white and orange coloring and flat illustration style. Remove all other vehicles, grapple (unless the grapple is the requested subject), letters and ground lines. Reconstruct any obscured portions of the requested vehicle cleanly. Center the complete subject with 8 percent margins on a pure white background. No text or additional objects.
+
+Subjects:
+grapple.png: the five-finger excavator grapple at the top
+pickup.png: the small pickup vehicle at bottom left
+truck.png: the large dump truck at bottom right
