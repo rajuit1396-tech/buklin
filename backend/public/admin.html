@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Buklin Admin</title>
+  <link rel="stylesheet" href="/admin.css">
+</head>
+<body>
+  <header class="topbar">
+    <img src="/buklin-logo.png" alt="Buklin">
+    <div><strong>Buklin Admin</strong><span>Account and operations control</span></div>
+    <button id="logoutButton" class="ghost" type="button" hidden>Sign out</button>
+  </header>
+
+  <main>
+    <section id="loginView" class="login-card">
+      <h1>Admin sign in</h1>
+      <p>Use the admin email or username configured in Render.</p>
+      <form id="loginForm">
+        <label>Email or username<input name="email" autocomplete="username" required></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" minlength="10" required></label>
+        <button type="submit">Sign in</button>
+      </form>
+    </section>
+
+    <section id="panelView" hidden>
+      <div class="welcome"><div><h1>Operations dashboard</h1><p id="adminName"></p></div><button id="refreshButton" class="ghost" type="button">Refresh</button></div>
+      <div id="totals" class="totals"></div>
+
+      <div class="grid">
+        <section class="card">
+          <h2>Create an account</h2>
+          <p>Only admins can create customer and operator accounts.</p>
+          <form id="accountForm">
+            <label>Full name<input name="name" minlength="2" maxlength="100" required></label>
+            <label>Phone<input name="phone" inputmode="tel" placeholder="+966501234567" required></label>
+            <label>Username<input name="username" pattern="[a-zA-Z0-9_]{3,40}" required></label>
+            <label>Temporary password<input name="password" type="password" minlength="10" required></label>
+            <label>Account type<select name="role" id="roleSelect"><option value="customer">Customer</option><option value="operator">Operator</option></select></label>
+            <label id="serviceField" hidden>Operator machine<select name="service"><option value="5-finger excavator grapple">5-finger excavator grapple</option><option value="Pickup van">Pickup van</option><option value="Big truck">Big truck</option></select></label>
+            <button type="submit">Create account</button>
+          </form>
+        </section>
+
+        <section class="card accounts-card">
+          <div class="section-title"><div><h2>Customer and operator accounts</h2><p>Search, adjust a balance, or clear a work restriction.</p></div></div>
+          <form id="searchForm" class="search"><input id="searchInput" aria-label="Search accounts" placeholder="Name, username, phone or email"><button type="submit" class="ghost">Search</button></form>
+          <div id="accounts" class="accounts"></div>
+        </section>
+      </div>
+    </section>
+    <p id="message" class="message" role="status" aria-live="polite"></p>
+  </main>
+  <script src="/admin.js" defer></script>
+</body>
+</html>

@@ -9,8 +9,6 @@ import 'package:flutter/services.dart';
 import 'work_location.dart';
 import 'site_picker.dart';
 import 'work_alerts.dart';
-import 'admin_panel.dart';
-import 'admin_login.dart';
 
 const services = ['5-finger excavator grapple', 'Pickup van', 'Big truck'];
 const serviceImages = ['assets/grapple.png', 'assets/pickup.png', 'assets/truck.png'];
@@ -310,12 +308,6 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    if (live && signedIn && db.user?['role'] == 'admin') {
-      return AdminPanel(onSignOut: () async {
-        await db.logout();
-        if (mounted) setState(() {});
-      });
-    }
     final active = jobs.where((j) => !['completed', 'cancelled'].contains(j['status'])).toList();
     return Scaffold(appBar: AppBar(
       automaticallyImplyLeading: false,
@@ -344,9 +336,6 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
               segments: const [ButtonSegment(value: false, label: Text('Customer')),
                 ButtonSegment(value: true, label: Text('Operator'))], selected: {operator},
               onSelectionChanged: busy ? null : (s) => setState(() => operator = s.first))),
-            if (!live) TextButton.icon(onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => const AdminLogin())),
-              icon: const Icon(Icons.admin_panel_settings_outlined), label: const Text('Admin panel')),
             Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(
               crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('Your balance: $availableBalance Riyal',
@@ -381,10 +370,6 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
     }),
     const SizedBox(height: 8),
     const Text('No account? Contact the administrator. Public registration is disabled.'),
-    const SizedBox(height: 16),
-    OutlinedButton.icon(onPressed: busy ? null : () => Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const AdminLogin())),
-      icon: const Icon(Icons.admin_panel_settings_outlined), label: const Text('Admin login')),
   ];
   List<Widget> customerView(List<Map<String, dynamic>> active) => [
     if (active.isEmpty) ...[

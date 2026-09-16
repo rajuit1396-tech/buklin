@@ -7,6 +7,8 @@ import {randomBytes,randomUUID,randomInt} from 'node:crypto';
 import {hasArrived} from './arrival.js';
 import {authenticate,hashPassword,checkPassword,tokenHash} from './auth.js';
 import {adminAccount} from './account-validation.js';
+import {fileURLToPath} from 'node:url';
+const publicDirectory=fileURLToPath(new URL('../public/',import.meta.url));
 const point = z.object({lat:z.number().min(-90).max(90),lng:z.number().min(-180).max(180)});
 const requestSchema = point.extend({equipment:z.enum(['5-finger excavator grapple','Pickup van','Big truck']),
  loading:z.enum(['Dyna','Trailer','Inside store']),store_number:z.string().regex(/^[0-9]{3}$/),
@@ -24,13 +26,10 @@ export function createApp(pool, notify=()=>{}, options={}) {
  const origins=(process.env.CORS_ORIGINS ?? 'http://localhost:8082').split(',');
  app.use(cors({origin:(origin,done)=>done(null,!origin || origins.includes(origin))}));
  app.use(express.json({limit:'16kb'}));
+ app.use(express.static(publicDirectory));
  if (!options.testing) app.use(rateLimit({windowMs:60000,limit:180}));
  const authLimit=options.testing ? (_q,_s,n)=>n() : rateLimit({windowMs:15*60000,limit:20});
- app.get('/',(_req,res)=>res.json({
-   ok:true,
-   service:'Buklin API',
-   message:'Backend is running. Use the Buklin app to sign in.'
- }));
+ app.get('/',(_req,res)=>res.sendFile('admin.html',{root:publicDirectory}));
  app.get('/health',async (_req,res)=>{ await pool.query('select 1'); res.json({ok:true}); });
  async function session(res,user) {
    const token=randomBytes(32).toString('hex');
