@@ -26,7 +26,7 @@ export function createApp(pool, notify=()=>{}, options={}) {
  if (process.env.TRUST_PROXY_HOPS === '1') app.set('trust proxy',1);
  // The bundled Flutter UI needs WebAssembly and map/font fetches. Scope its
  // policy to /app so the admin panel retains Helmet's stricter defaults.
- app.use('/app',helmet({contentSecurityPolicy:{directives:{
+ app.use('/app',helmet({referrerPolicy:{policy:'strict-origin-when-cross-origin'},contentSecurityPolicy:{directives:{
    scriptSrc:["'self'","'wasm-unsafe-eval'","blob:"],
    connectSrc:["'self'",'https:','wss:'],
    imgSrc:["'self'",'https:','data:','blob:'],

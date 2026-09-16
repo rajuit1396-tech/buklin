@@ -24,6 +24,12 @@ test('authenticated work flow protects private fields and validates transitions'
  try {
  const adminPage=await api.get('/');
  assert.equal(adminPage.status,200);assert.match(adminPage.text,/Buklin Admin/);
+ const mapApp=await api.get('/app/');
+ assert.equal(mapApp.status,200);
+ // OSM requires a Referer on browser tile requests. Send only the origin
+ // cross-site, preserving the admin panel's more restrictive policy.
+ assert.equal(mapApp.headers['referrer-policy'],'strict-origin-when-cross-origin');
+ assert.equal(adminPage.headers['referrer-policy'],'no-referrer');
  assert.equal((await api.get('/health')).status,200);
  assert.equal((await api.post('/auth/register').send({email:'blocked@example.com',password:'StrongPassword123'})).status,403);
  const customer=await account('customer@example.com');
