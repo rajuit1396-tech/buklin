@@ -14,6 +14,6 @@ export async function checkPassword(password, encoded) {
 export async function authenticate(pool, token) {
  if (!token || token.length > 200) return null;
  const {rows} = await pool.query(`select u.id,u.email,u.name,u.phone,u.username,u.role,u.service,u.online,u.blocked_until from sessions s
- join users u on u.id=s.user_id where s.token_hash=$1 and s.expires_at>now()`,[tokenHash(token)]);
+ join users u on u.id=s.user_id where s.token_hash=$1 and s.expires_at>now() and u.deleted_at is null`,[tokenHash(token)]);
  return rows[0] ?? null;
 }

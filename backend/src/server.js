@@ -8,7 +8,8 @@ import {ensureAdmin} from './admin-bootstrap.js';
 // Keep this small compatibility migration automatic for existing Render/Neon
 // databases so cancellation fees work immediately after deployment.
 await pool.query(`alter table work_charges drop constraint if exists work_charges_amount_check;
-  alter table work_charges add constraint work_charges_amount_check check(amount in (-4,-2));`);
+  alter table work_charges add constraint work_charges_amount_check check(amount in (-4,-2));
+  alter table users add column if not exists deleted_at timestamptz;`);
 if (await ensureAdmin(pool)) {
  console.log('Admin email login configured from environment. Remove ADMIN_PASSWORD after a successful sign-in.');
 }

@@ -43,7 +43,7 @@ export function createApp(pool, notify=()=>{}, options={}) {
  app.post('/auth/login',authLimit,async(req,res)=>{
    const body=z.object({email:z.string().trim().min(3).max(254).toLowerCase(),password:z.string().min(10).max(128),
      admin_only:z.boolean().optional(),expected_role:z.enum(['customer','operator']).optional()}).parse(req.body);
-   const {rows}=await pool.query('select * from users where email=$1 or username=$1',[body.email]);
+   const {rows}=await pool.query('select * from users where deleted_at is null and (email=$1 or username=$1)',[body.email]);
    if (!rows[0] || (body.admin_only === true && rows[0].role !== 'admin') ||
      (body.expected_role && rows[0].role !== body.expected_role) ||
      !await checkPassword(body.password,rows[0].password_hash)) fail(401,'Invalid username, password or account type');
@@ -66,7 +66,7 @@ export function createApp(pool, notify=()=>{}, options={}) {
    const {rows}=await pool.query(`select id,name,phone,username,email,role,service,online,blocked_until,
      (coalesce((select sum(amount) from work_charges where user_id=users.id),0)+
       coalesce((select sum(amount) from balance_adjustments where user_id=users.id),0))::integer as balance from users
-     where role in ('customer','operator') and
+     where role in ('customer','operator') and deleted_at is null and
      (coalesce(name,'') ilike $1 or coalesce(username,'') ilike $1 or coalesce(phone,'') ilike $1 or coalesce(email,'') ilike $1)
      order by coalesce(name,username,email),id limit 101 offset $2`,['%'+search+'%',offset]);
    res.json({users:rows.slice(0,100),has_more:rows.length>100});
@@ -76,9 +76,12 @@ export function createApp(pool, notify=()=>{}, options={}) {
    const {rows:totals}=await pool.query(`with balances as (
      select u.id,coalesce((select sum(amount) from work_charges where user_id=u.id),0)+
        coalesce((select sum(amount) from balance_adjustments where user_id=u.id),0) as balance
-     from users u where role in ('customer','operator'))
-     select (select count(*) from users where role='customer') as customers,
-       (select count(*) from users where role='operator') as operators,
+     from users u where role in ('customer','operator') and deleted_at is null)
+     select (select count(*) from users where role='customer' and deleted_at is null) as customers,
+       (select count(*) from users where role='operator' and deleted_at is null) as operators,
+       (select count(*) from users where role='operator' and deleted_at is null and online=true) as online_operators,
+       (select count(*) from jobs) as total_requests,
+       (select count(*) from jobs where status='requested') as waiting_requests,
        (select count(*) from jobs where status in ('requested','accepted','on_the_way','working')) as active_jobs,
        (select count(*) from jobs where status='completed') as completed_jobs,
        (select coalesce(-sum(amount),0) from work_charges) as fees,
@@ -107,6 +110,22 @@ export function createApp(pool, notify=()=>{}, options={}) {
    });
    notify();res.json({ok:true});
  });
+ app.post('/admin/users/:id/balance/set',async(req,res)=>{
+   const userId=z.uuid().parse(req.params.id);
+   const b=z.object({id:z.uuid(),balance:z.number().int().min(-1000000).max(1000000),
+     reason:z.string().trim().min(3).max(300)}).parse(req.body);
+   let amount=0;
+   await transaction(pool,async c=>{
+     const target=await c.query(`select id,(coalesce((select sum(amount) from work_charges where user_id=$1),0)+
+       coalesce((select sum(amount) from balance_adjustments where user_id=$1),0))::integer as balance
+       from users where id=$1 and role in ('customer','operator') and deleted_at is null for update`,[userId]);
+     if(!target.rowCount) fail(404,'Account unavailable');
+     amount=b.balance-Number(target.rows[0].balance);
+     if(amount!==0) await c.query(`insert into balance_adjustments(id,user_id,admin_id,amount,reason,kind)
+       values($1,$2,$3,$4,$5,'adjustment')`,[b.id,userId,req.user.id,amount,b.reason]);
+   });
+   notify();res.json({ok:true,balance:b.balance,adjustment:amount});
+ });
  app.get('/admin/users/:id/balance',async(req,res)=>{
    const id=z.uuid().parse(req.params.id);
    const {rows}=await pool.query(`select amount,reason,created_at,admin_id from balance_adjustments where user_id=$1
@@ -119,6 +138,32 @@ export function createApp(pool, notify=()=>{}, options={}) {
    const id=z.uuid().parse(req.params.id);
    const result=await pool.query("update users set blocked_until=null where id=$1 and role in ('customer','operator')",[id]);
    if(!result.rowCount) fail(404,'Account unavailable');
+   notify();res.json({ok:true});
+ });
+ app.get('/admin/users/:id/jobs',async(req,res)=>{
+   const id=z.uuid().parse(req.params.id);
+   const account=await pool.query("select id from users where id=$1 and role in ('customer','operator')",[id]);
+   if(!account.rowCount) fail(404,'Account unavailable');
+   const {rows}=await pool.query(`select id,service,loading_vehicle,offered_amount,status,created_at,
+     case when customer_id=$1 then 'customer' else 'operator' end as participation
+     from jobs where customer_id=$1 or operator_id=$1 order by created_at desc limit 100`,[id]);
+   res.json({jobs:rows,completed:rows.filter(row=>row.status==='completed').length,total:rows.length});
+ });
+ app.delete('/admin/users/:id',async(req,res)=>{
+   const id=z.uuid().parse(req.params.id);
+   await transaction(pool,async c=>{
+     const account=await c.query("select id from users where id=$1 and role in ('customer','operator') and deleted_at is null for update",[id]);
+     if(!account.rowCount) fail(404,'Account unavailable');
+     await c.query(`update jobs set status='cancelled' where (customer_id=$1 or operator_id=$1)
+       and status in ('requested','accepted','on_the_way','working')`,[id]);
+     await c.query(`delete from job_start_codes where job_id in
+       (select id from jobs where (customer_id=$1 or operator_id=$1) and status='cancelled')`,[id]);
+     await c.query(`delete from notification_outbox where job_id in
+       (select id from jobs where (customer_id=$1 or operator_id=$1) and status='cancelled')`,[id]);
+     await c.query('delete from sessions where user_id=$1',[id]);
+     await c.query(`update users set deleted_at=now(),online=false,email=null,phone=null,username=null,
+       blocked_until=null where id=$1`,[id]);
+   });
    notify();res.json({ok:true});
  });
  app.post('/admin/users',async(req,res)=>{

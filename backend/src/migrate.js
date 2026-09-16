@@ -9,6 +9,7 @@ try {
    alter table users add column if not exists name text;
    alter table users add column if not exists phone text;
    alter table users add column if not exists username text;
+   alter table users add column if not exists deleted_at timestamptz;
    create unique index if not exists users_username_unique on users(username);
    alter table users drop constraint if exists users_role_check;
    alter table users add constraint users_role_check check(role in ('customer','operator','admin'));`);

@@ -10,6 +10,7 @@ create table if not exists sessions (
  token_hash text primary key, user_id uuid not null references users(id), expires_at timestamptz not null
 );
 alter table users add column if not exists blocked_until timestamptz;
+alter table users add column if not exists deleted_at timestamptz;
 create table if not exists jobs (
  id uuid primary key, customer_id uuid not null references users(id), operator_id uuid references users(id),
  service text not null check(service in ('5-finger excavator grapple','Pickup van','Big truck')),
