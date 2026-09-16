@@ -63,12 +63,12 @@ export function createApp(pool, notify=()=>{}, options={}) {
  app.get('/admin/users',async(req,res)=>{
    const search=z.string().max(100).parse(req.query.search ?? '');
    const offset=z.coerce.number().int().min(0).max(10000000).parse(req.query.offset ?? 0);
-   const {rows}=await pool.query(`select id,name,phone,username,email,role,service,online,blocked_until,
+   const {rows}=await pool.query(`select id,name,phone,username,email,role,service,online,blocked_until,deleted_at,
      (coalesce((select sum(amount) from work_charges where user_id=users.id),0)+
       coalesce((select sum(amount) from balance_adjustments where user_id=users.id),0))::integer as balance from users
-     where role in ('customer','operator') and deleted_at is null and
+     where role in ('customer','operator') and
      (coalesce(name,'') ilike $1 or coalesce(username,'') ilike $1 or coalesce(phone,'') ilike $1 or coalesce(email,'') ilike $1)
-     order by coalesce(name,username,email),id limit 101 offset $2`,['%'+search+'%',offset]);
+     order by (deleted_at is not null),coalesce(name,username,email),id limit 101 offset $2`,['%'+search+'%',offset]);
    res.json({users:rows.slice(0,100),has_more:rows.length>100});
  });
  app.get('/admin/dashboard',async(req,res)=>{
@@ -146,7 +146,7 @@ export function createApp(pool, notify=()=>{}, options={}) {
    if(!account.rowCount) fail(404,'Account unavailable');
    const {rows}=await pool.query(`select id,service,loading_vehicle,offered_amount,status,created_at,
      case when customer_id=$1 then 'customer' else 'operator' end as participation
-     from jobs where customer_id=$1 or operator_id=$1 order by created_at desc limit 100`,[id]);
+     from jobs where customer_id=$1 or operator_id=$1 order by created_at desc`,[id]);
    res.json({jobs:rows,completed:rows.filter(row=>row.status==='completed').length,total:rows.length});
  });
  app.delete('/admin/users/:id',async(req,res)=>{
@@ -208,7 +208,7 @@ export function createApp(pool, notify=()=>{}, options={}) {
     ($2='operator' and $4 and not exists(select 1 from users where id=$1 and blocked_until>now()) and j.status='requested' and j.service=$3 and j.customer_id<>$1 and
      not exists(select 1 from jobs active where active.operator_id=$1 and active.status in ('accepted','on_the_way','working')) and
      not exists(select 1 from declines d where d.job_id=j.id and d.operator_id=$1))
-    order by j.created_at desc limit 100`,[u.id,u.role,u.service,balance>-20]);
+    order by j.created_at desc`,[u.id,u.role,u.service,balance>-20]);
    res.json({jobs:rows,online:u.online,balance,blocked_until:u.blocked_until,payment_required:balance<=-20});
  });
  app.post('/jobs',async(req,res)=>{

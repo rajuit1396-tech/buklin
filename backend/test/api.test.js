@@ -93,6 +93,7 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.deepEqual(competing.map(r=>r.status).sort(),[200,409]);
  const winner=competing[0].status===200?operator:other;
  const loser=winner===operator?other:operator;
+ assert.ok(!(await get('/jobs',loser.token)).body.jobs.some(job=>job.id===id));
  const accepted=(await get('/jobs',winner.token)).body.jobs[0];
  assert.equal(accepted.start_otp,null);
  const customerJob=(await get('/jobs',customer.token)).body.jobs[0];
@@ -190,6 +191,9 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal((await post(`/jobs/${finalJob}/action`,winner.token,{action:'complete'})).status,200);
  assert.equal((await get('/jobs',winner.token)).body.balance,16);
  assert.equal((await get('/jobs',stranger.token)).body.balance,14);
+ const reinstalledCustomer=await api.post('/auth/login').send({email:'customer@example.com',password:'StrongPassword123',expected_role:'customer'});
+ assert.equal(reinstalledCustomer.status,200);
+ assert.ok((await get('/jobs',reinstalledCustomer.body.token)).body.jobs.some(job=>job.id===id&&job.status==='completed'));
  assert.equal((await get('/admin/dashboard',stranger.token)).status,403);
  assert.equal((await get('/admin/dashboard',winner.token)).status,403);
  assert.equal((await post(balancePath,admin.token,{id:randomUUID(),amount:7,reason:'Cash received',kind:'payment'})).status,200);
@@ -204,7 +208,8 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal((await api.delete(`/admin/users/${customerCreated.body.user.id}`).auth(stranger.token,{type:'bearer'})).status,403);
  assert.equal((await api.delete(`/admin/users/${customerCreated.body.user.id}`).auth(admin.token,{type:'bearer'})).status,200);
  assert.equal((await get('/me',loggedIn.body.token)).status,401);
- assert.ok(!(await get('/admin/users',admin.token)).body.users.some(u=>u.id===customerCreated.body.user.id));
+ const archived=(await get('/admin/users',admin.token)).body.users.find(u=>u.id===customerCreated.body.user.id);
+ assert.ok(archived.deleted_at);assert.equal((await get(`/admin/users/${archived.id}/jobs`,admin.token)).status,200);
  assert.equal((await post('/admin/users',admin.token,{...newAccount,role:'customer',service:null,username:'new_customer'})).status,201);
  const dashboard=(await get('/admin/dashboard',admin.token)).body;
  assert.equal(Number(dashboard.totals.received),47);

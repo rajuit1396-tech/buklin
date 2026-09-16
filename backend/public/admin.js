@@ -17,15 +17,15 @@ async function api(path,options={}){
 }
 function stat(label,value){const box=document.createElement('div');box.className='stat';const number=document.createElement('b');number.textContent=value??0;const text=document.createElement('span');text.textContent=label;box.append(number,text);return box;}
 function accountRow(user){
-  const row=document.createElement('article');row.className='account';const info=document.createElement('div');const title=document.createElement('h3');title.textContent=user.name;
+  const row=document.createElement('article');row.className='account';const info=document.createElement('div');const title=document.createElement('h3');title.textContent=user.name+(user.deleted_at?' (Archived)':'');
   const identity=document.createElement('p');identity.textContent=`@${user.username} · ${user.phone}`;const detail=document.createElement('p');detail.textContent=user.role==='operator'?`Operator · ${user.service}`:'Customer';
   const balance=document.createElement('p');balance.className='balance';balance.textContent=`Balance: ${user.balance??0}`;info.append(title,identity,detail,balance);
   if(user.blocked_until){const blocked=document.createElement('p');blocked.textContent=`Restricted until ${new Date(user.blocked_until).toLocaleString()}`;info.append(blocked);}
   const actions=document.createElement('div');actions.className='actions';
-  const payment=actionButton('Add payment',()=>adjustBalance(user,'payment'));const adjust=actionButton('Adjust',()=>adjustBalance(user,'adjustment'));const set=actionButton('Set balance',()=>setBalance(user));const history=actionButton('Work history',()=>showJobs(user));
-  actions.append(payment,adjust,set,history);
-  if(user.blocked_until){const clear=document.createElement('button');clear.type='button';clear.className='ghost';clear.textContent='Clear restriction';clear.addEventListener('click',()=>clearRestriction(user));actions.append(clear);}
-  const remove=actionButton('Delete account',()=>deleteAccount(user));remove.classList.add('danger');actions.append(remove);
+  const history=actionButton('Work history',()=>showJobs(user));actions.append(history);
+  if(!user.deleted_at){const payment=actionButton('Add payment',()=>adjustBalance(user,'payment'));const adjust=actionButton('Adjust',()=>adjustBalance(user,'adjustment'));const set=actionButton('Set balance',()=>setBalance(user));actions.prepend(payment,adjust,set);
+    if(user.blocked_until){const clear=document.createElement('button');clear.type='button';clear.className='ghost';clear.textContent='Clear restriction';clear.addEventListener('click',()=>clearRestriction(user));actions.append(clear);}
+    const remove=actionButton('Delete account',()=>deleteAccount(user));remove.classList.add('danger');actions.append(remove);}
   row.append(info,actions);return row;
 }
 function actionButton(label,handler){const button=document.createElement('button');button.type='button';button.className='ghost';button.textContent=label;button.addEventListener('click',handler);return button;}
