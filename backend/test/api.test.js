@@ -22,6 +22,8 @@ test('authenticated work flow protects private fields and validates transitions'
    const r=await api.post('/auth/login').send({email,password:'StrongPassword123'});assert.equal(r.status,200);return r.body;
  };
  try {
+ assert.deepEqual((await api.get('/')).body,{ok:true,service:'Buklin API',message:'Backend is running. Use the Buklin app to sign in.'});
+ assert.equal((await api.get('/health')).status,200);
  assert.equal((await api.post('/auth/register').send({email:'blocked@example.com',password:'StrongPassword123'})).status,403);
  const customer=await account('customer@example.com');
  const stranger=await account('stranger@example.com');

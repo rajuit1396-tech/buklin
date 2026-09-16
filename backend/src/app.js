@@ -26,6 +26,11 @@ export function createApp(pool, notify=()=>{}, options={}) {
  app.use(express.json({limit:'16kb'}));
  if (!options.testing) app.use(rateLimit({windowMs:60000,limit:180}));
  const authLimit=options.testing ? (_q,_s,n)=>n() : rateLimit({windowMs:15*60000,limit:20});
+ app.get('/',(_req,res)=>res.json({
+   ok:true,
+   service:'Buklin API',
+   message:'Backend is running. Use the Buklin app to sign in.'
+ }));
  app.get('/health',async (_req,res)=>{ await pool.query('select 1'); res.json({ok:true}); });
  async function session(res,user) {
    const token=randomBytes(32).toString('hex');
