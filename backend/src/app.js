@@ -110,7 +110,8 @@ export function createApp(pool, notify=()=>{}, options={}) {
  app.get('/admin/users/:id/balance',async(req,res)=>{
    const id=z.uuid().parse(req.params.id);
    const {rows}=await pool.query(`select amount,reason,created_at,admin_id from balance_adjustments where user_id=$1
-     union all select amount,'Completed work fee' as reason,created_at,null::uuid as admin_id from work_charges where user_id=$1
+     union all select amount,case when amount=-2 then 'Cancellation fee' else 'Completed work fee' end as reason,
+       created_at,null::uuid as admin_id from work_charges where user_id=$1
      order by created_at desc limit 100`,[id]);
    res.json({entries:rows});
  });
@@ -193,6 +194,8 @@ export function createApp(pool, notify=()=>{}, options={}) {
       if(!['requested','accepted','on_the_way'].includes(j.status) ||
         !(j.customer_id===u.id || j.operator_id===u.id)) fail(409,'Only participants can cancel before work starts');
       await c.query("update jobs set status='cancelled' where id=$1",[id]);
+      await c.query(`insert into work_charges(job_id,user_id,amount) values($1,$2,-2)
+        on conflict(job_id,user_id) do nothing`,[id,u.id]);
       await c.query(`update users set blocked_until=now()+($2 * interval '1 hour'),
         online=case when role='operator' then false else online end where id=$1`,[u.id,j.customer_id===u.id?72:5]);
       await c.query('delete from job_start_codes where job_id=$1',[id]);

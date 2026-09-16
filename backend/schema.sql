@@ -46,7 +46,7 @@ create table if not exists job_start_codes (
 create table if not exists work_charges (
  job_id uuid not null references jobs(id),
  user_id uuid not null references users(id),
- amount integer not null check(amount = -4),
+ amount integer not null check(amount in (-4,-2)),
  created_at timestamptz not null default now(),
  primary key(job_id,user_id)
 );

@@ -141,7 +141,7 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal((await post(`/jobs/${nextJob.body.id}/action`,stranger.token,{action:'cancel'})).status,200);
  const blockedCustomer=(await get('/jobs',stranger.token)).body;
  assert.ok(new Date(blockedCustomer.blocked_until)-Date.now()>71*3600000);
- assert.equal(blockedCustomer.balance,0);
+ assert.equal(blockedCustomer.balance,-2);
  assert.equal((await post('/jobs',stranger.token,body)).status,403);
  await pool.query("update users set blocked_until=now()-interval '1 second' where id=$1",[stranger.user.id]);
  const another=await post('/jobs',stranger.token,body);assert.equal(another.status,201);
@@ -150,7 +150,7 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal((await post(`/jobs/${another.body.id}/action`,winner.token,{action:'cancel'})).status,200);
  const blockedOperator=(await get('/jobs',winner.token)).body;
  assert.ok(new Date(blockedOperator.blocked_until)-Date.now()>4.9*3600000);
- assert.equal(blockedOperator.balance,-4);
+ assert.equal(blockedOperator.balance,-6);
  assert.equal((await api.put('/availability').auth(winner.token,{type:'bearer'}).send({available:true})).status,403);
  const retry=await post('/jobs',stranger.token,body);assert.equal(retry.status,201);
  assert.ok((await get('/jobs',winner.token)).body.jobs.every(j=>j.status!=='requested'));
@@ -159,7 +159,7 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal((await api.put('/availability').auth(winner.token,{type:'bearer'}).send({available:true})).status,200);
  assert.equal((await post(`/jobs/${retry.body.id}/action`,winner.token,{action:'accept'})).status,200);
  assert.equal((await get('/jobs',customer.token)).status,401);
- const adjustment={id:randomUUID(),amount:4,reason:'Payment received'};
+ const adjustment={id:randomUUID(),amount:6,reason:'Payment received'};
  const balancePath=`/admin/users/${winner.user.id}/balance`;
  assert.equal((await post(balancePath,stranger.token,adjustment)).status,403);
  assert.equal((await post(balancePath,winner.token,adjustment)).status,403);
@@ -169,7 +169,7 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal((await post(balancePath,admin.token,{...adjustment,amount:5})).status,409);
  assert.equal((await post(balancePath,admin.token,{id:randomUUID(),amount:-2,reason:'Correction'})).status,200);
  assert.equal((await get('/jobs',winner.token)).body.balance,-2);
- assert.equal((await get(balancePath,admin.token)).body.entries.length,winner===operator?5:3);
+ assert.equal((await get(balancePath,admin.token)).body.entries.length,winner===operator?6:4);
  assert.equal((await get(balancePath,stranger.token)).status,403);
  assert.equal((await post(`/admin/users/${customer.user.id}/balance`,admin.token,{id:randomUUID(),amount:4,reason:'Customer payment'})).status,200);
  assert.equal((await get('/admin/users',admin.token)).body.users.find(u=>u.id===customer.user.id).balance,0);
@@ -181,7 +181,7 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal((await post(balancePath,admin.token,{id:randomUUID(),amount:22,reason:'Wallet top up'})).status,200);
  assert.equal((await post(`/admin/users/${stranger.user.id}/balance`,admin.token,{id:randomUUID(),amount:20,reason:'Wallet top up'})).status,200);
  assert.equal((await get('/jobs',winner.token)).body.balance,20);
- assert.equal((await get('/jobs',stranger.token)).body.balance,20);
+ assert.equal((await get('/jobs',stranger.token)).body.balance,18);
  const finalJob=retry.body.id;
  await api.put(`/jobs/${finalJob}/location`).auth(winner.token,{type:'bearer'}).send({lat:body.lat,lng:body.lng});
  assert.equal((await post(`/jobs/${finalJob}/action`,winner.token,{action:'travel'})).status,200);
@@ -189,14 +189,14 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal((await post(`/jobs/${finalJob}/action`,winner.token,{action:'start',otp:finalOtp})).status,200);
  assert.equal((await post(`/jobs/${finalJob}/action`,winner.token,{action:'complete'})).status,200);
  assert.equal((await get('/jobs',winner.token)).body.balance,16);
- assert.equal((await get('/jobs',stranger.token)).body.balance,16);
+ assert.equal((await get('/jobs',stranger.token)).body.balance,14);
  assert.equal((await get('/admin/dashboard',stranger.token)).status,403);
  assert.equal((await get('/admin/dashboard',winner.token)).status,403);
  assert.equal((await post(balancePath,admin.token,{id:randomUUID(),amount:7,reason:'Cash received',kind:'payment'})).status,200);
  assert.equal((await post(balancePath,admin.token,{id:randomUUID(),amount:3,reason:'Courtesy credit',kind:'adjustment'})).status,200);
  const dashboard=(await get('/admin/dashboard',admin.token)).body;
  assert.equal(Number(dashboard.totals.received),47);
- assert.equal(Number(dashboard.totals.fees),16);
+ assert.equal(Number(dashboard.totals.fees),20);
  assert.equal(Number(dashboard.totals.completed_jobs),2);
  assert.ok(dashboard.activities.some(a=>a.description==='Work status: completed'));
  assert.ok(dashboard.activities.some(a=>a.description.includes('Cash received')));

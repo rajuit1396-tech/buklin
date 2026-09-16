@@ -417,8 +417,8 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
           builder: (context) => AlertDialog(
                   title: const Text('Cancel this work?'),
                   content: Text(operator
-                      ? 'You will be unable to accept new work for 5 hours.'
-                      : 'You will be unable to make new requests for 3 days.'),
+                      ? 'A 2 Riyal cancellation fee applies. You will be unable to accept new work for 5 hours.'
+                      : 'A 2 Riyal cancellation fee applies. You will be unable to make new requests for 3 days.'),
                   actions: [
                     TextButton(
                         onPressed: () => Navigator.pop(context, false),
@@ -469,6 +469,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
             if (mounted) setState(() {});
           });
           if (operator) online = false;
+          balance -= 2;
           job.remove('start_otp');
         }
         if (action == 'complete' && job['status'] != 'working') {
