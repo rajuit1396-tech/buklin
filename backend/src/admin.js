@@ -1,17 +1,12 @@
-import {randomUUID} from 'node:crypto';
 import {pool} from './db.js';
 import {hashPassword} from './auth.js';
 import {accountFields} from './account-validation.js';
+import {ensureAdmin} from './admin-bootstrap.js';
+import {randomUUID} from 'node:crypto';
 import {z} from 'zod';
 try {
   if (process.env.ADMIN_EMAIL) {
-    const email=z.email().parse(process.env.ADMIN_EMAIL.trim().toLowerCase());
-    const password=z.string().min(10).max(128).parse(process.env.ADMIN_PASSWORD);
-    const hash=await hashPassword(password);
-    const result=await pool.query(`insert into users(id,name,email,password_hash,role)
-      values($1,$2,$3,$4,'admin') on conflict(email) do update set password_hash=excluded.password_hash
-      where users.role='admin' returning id`,[randomUUID(),process.env.ADMIN_NAME || 'Admin',email,hash]);
-    if(!result.rowCount) throw new Error('This email belongs to a non-admin account; no changes made.');
+    await ensureAdmin(pool);
     console.log('Admin email login configured. Remove ADMIN_PASSWORD from .env after use.');
   } else {
   const parsed=accountFields.safeParse({name:process.env.ADMIN_NAME,phone:process.env.ADMIN_PHONE,

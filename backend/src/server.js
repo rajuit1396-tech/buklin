@@ -4,6 +4,10 @@ import {pool} from './db.js';
 import {authenticate} from './auth.js';
 import {createApp} from './app.js';
 import {startNotifications} from './notifications.js';
+import {ensureAdmin} from './admin-bootstrap.js';
+if (await ensureAdmin(pool)) {
+ console.log('Admin email login configured from environment. Remove ADMIN_PASSWORD after a successful sign-in.');
+}
 const sockets=new Set();
 const broadcast=()=>{for(const ws of sockets)if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'refresh'}));};
 const server=createServer(createApp(pool,broadcast));
