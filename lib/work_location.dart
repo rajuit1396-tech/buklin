@@ -12,11 +12,18 @@ String? coordinateError(String? value, int bound) {
   return n == null || !n.isFinite || n.abs() > bound ? 'Enter a coordinate between -$bound and $bound' : null;
 }
 Future<Position> currentPosition() async {
-  if (!await Geolocator.isLocationServiceEnabled()) throw Exception('Turn on location services.');
+  if (!await Geolocator.isLocationServiceEnabled()) {
+    await Geolocator.openLocationSettings();
+    throw Exception('Turn on phone location services, then try again.');
+  }
   var permission = await Geolocator.checkPermission();
   if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
-  if ([LocationPermission.denied, LocationPermission.deniedForever].contains(permission)) {
-    throw Exception('Location permission is required. Allow it in your device or browser settings.');
+  if (permission == LocationPermission.deniedForever) {
+    await Geolocator.openAppSettings();
+    throw Exception('Location permission is blocked. Allow it in Buklin app settings, then try again.');
+  }
+  if (permission == LocationPermission.denied) {
+    throw Exception('Location permission is required. Tap again and choose Allow.');
   }
   return Geolocator.getCurrentPosition(locationSettings: const LocationSettings(
     accuracy: LocationAccuracy.high, timeLimit: Duration(seconds: 20)));
@@ -156,4 +163,3 @@ class _WorkLocationState extends State<WorkLocation> {
     ]);
   }
 }
-

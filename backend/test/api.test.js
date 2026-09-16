@@ -30,6 +30,12 @@ test('authenticated work flow protects private fields and validates transitions'
  const admin=await account('admin@example.com');
  await pool.query("update users set role='admin' where id=$1",[admin.user.id]);
  await pool.query("update users set role='operator',service='Pickup van',online=true where id in ($1,$2)",[operator.user.id,other.user.id]);
+ assert.equal((await api.post('/auth/login').send({email:'customer@example.com',password:'StrongPassword123',expected_role:'customer'})).status,200);
+ assert.equal((await api.post('/auth/login').send({email:'customer@example.com',password:'StrongPassword123',expected_role:'operator'})).status,401);
+ assert.equal((await api.post('/auth/login').send({email:'operator@example.com',password:'StrongPassword123',expected_role:'operator'})).status,200);
+ assert.equal((await api.post('/auth/login').send({email:'operator@example.com',password:'StrongPassword123',expected_role:'customer'})).status,401);
+ assert.equal((await api.post('/auth/login').send({email:'customer@example.com',password:'StrongPassword123',admin_only:true})).status,401);
+ assert.equal((await api.post('/auth/login').send({email:'admin@example.com',password:'StrongPassword123',admin_only:true})).status,200);
  const body={equipment:'Pickup van',loading:'Dyna',store_number:'007',offered_amount:'250',
    site_address:'Private pinned work site',work_details:'Pickup van with Dyna loading',lat:24.5,lng:46.7};
  const post=(path,token,data)=>api.post(path).auth(token,{type:'bearer'}).send(data);
@@ -181,4 +187,3 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal((await post(balancePath,admin.token,{id:randomUUID(),amount:-3,reason:'Invalid payment',kind:'payment'})).status,400);
  }finally{await db.close();}
 });
-

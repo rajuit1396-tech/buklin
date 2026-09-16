@@ -127,6 +127,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
   DateTime? get restrictionEnd => live ? blockedUntil : demoBlocks[operator];
   bool get restricted => restrictionEnd?.isAfter(DateTime.now()) ?? false;
   bool operator = false, online = false, busy = false, refreshing = false;
+  String loginRole = 'customer';
   String? message;
   Timer? poll;
   StreamSubscription<dynamic>? channel;
@@ -322,8 +323,8 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
         ? IconButton(tooltip: 'Back', icon: const Icon(Icons.arrow_back),
             onPressed: busy || page == 0 ? null : () => goToPage(page - 1))
         : null,
-      title: const Text('BUKLIN',
-      style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 3)), actions: [
+      title: Image.asset('assets/buklin-logo.png', height: 48,
+        fit: BoxFit.contain, semanticLabel: 'Buklin'), actions: [
       if (live && signedIn) IconButton(tooltip: 'Sign out', onPressed: busy ? null : () => perform(() async {
         if (operator) await db.call('PUT', '/availability', {'available': false});
         poll?.cancel(); await channel?.cancel();
@@ -362,15 +363,28 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
         ])))));
   }
   List<Widget> login() => [
-    Image.asset('assets/buklin-logo.png', height: 180), heading('Work on demand.'),
-    const Text('Request equipment. Connect with an operator. Get the job done.'), const SizedBox(height: 24),
+    Image.asset('assets/buklin-logo.png', height: 180), heading('Sign in to Buklin'),
+    const Text('Accounts are created only by the Buklin administrator.'), const SizedBox(height: 20),
+    SegmentedButton<String>(segments: const [
+      ButtonSegment(value: 'customer', label: Text('Customer'), icon: Icon(Icons.person_outline)),
+      ButtonSegment(value: 'operator', label: Text('Operator'), icon: Icon(Icons.engineering)),
+    ], selected: {loginRole}, onSelectionChanged: busy ? null : (roles) => setState(() => loginRole = roles.first)),
+    const SizedBox(height: 20),
+    Text('${loginRole == 'operator' ? 'Operator' : 'Customer'} login',
+      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+    const SizedBox(height: 12),
     TextField(controller: email, decoration: const InputDecoration(labelText: 'Username or email')),
     const SizedBox(height: 12), TextField(controller: password, obscureText: true, decoration: const InputDecoration(labelText: 'Password')),
     const SizedBox(height: 16), button('Sign in', () async {
-      await db.login(email.text.trim(), password.text);
+      await db.login(email.text.trim(), password.text, expectedRole: loginRole);
       password.clear(); restoreWork(); connect();
     }),
-    const Text('Contact the admin to create your customer or operator account.'),
+    const SizedBox(height: 8),
+    const Text('No account? Contact the administrator. Public registration is disabled.'),
+    const SizedBox(height: 16),
+    OutlinedButton.icon(onPressed: busy ? null : () => Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const AdminLogin())),
+      icon: const Icon(Icons.admin_panel_settings_outlined), label: const Text('Admin login')),
   ];
   List<Widget> customerView(List<Map<String, dynamic>> active) => [
     if (active.isEmpty) ...[

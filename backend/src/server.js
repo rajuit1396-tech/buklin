@@ -22,5 +22,8 @@ wss.on('connection',ws=>{
  ws.on('error',()=>sockets.delete(ws));
 });
 const stopNotifications=startNotifications(pool);
-server.listen(Number(process.env.PORT || 3000),process.env.HOST || '127.0.0.1',()=>console.log('Buklin API listening on port '+(process.env.PORT || 3000)));
+// Cloud hosts such as Render route traffic through the container's public
+// interface, so the API must listen on every interface. Local development is
+// still limited to the configured port and can override HOST when required.
+server.listen(Number(process.env.PORT || 3000),process.env.HOST || '0.0.0.0',()=>console.log('Buklin API listening on port '+(process.env.PORT || 3000)));
 process.on('SIGINT',async()=>{stopNotifications();for(const ws of sockets)ws.close();wss.close();server.close();await pool.end();});

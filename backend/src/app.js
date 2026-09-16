@@ -37,9 +37,12 @@ export function createApp(pool, notify=()=>{}, options={}) {
    fail(403,'Self-registration is disabled. Contact the admin to create your account.');
  });
  app.post('/auth/login',authLimit,async(req,res)=>{
-   const body=z.object({email:z.string().trim().min(3).max(254).toLowerCase(),password:z.string().min(10).max(128)}).parse(req.body);
+   const body=z.object({email:z.string().trim().min(3).max(254).toLowerCase(),password:z.string().min(10).max(128),
+     admin_only:z.boolean().optional(),expected_role:z.enum(['customer','operator']).optional()}).parse(req.body);
    const {rows}=await pool.query('select * from users where email=$1 or username=$1',[body.email]);
-   if (!rows[0] || (req.body.admin_only === true && rows[0].role !== 'admin') || !await checkPassword(body.password,rows[0].password_hash)) fail(401,'Invalid username or password');
+   if (!rows[0] || (body.admin_only === true && rows[0].role !== 'admin') ||
+     (body.expected_role && rows[0].role !== body.expected_role) ||
+     !await checkPassword(body.password,rows[0].password_hash)) fail(401,'Invalid username, password or account type');
    await session(res,rows[0]);
  });
  app.use(async(req,_res,next)=>{

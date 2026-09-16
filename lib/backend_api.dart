@@ -41,8 +41,9 @@ class BackendApi {
       return data;
     } finally {client.close();}
   }
-  Future<void> login(String email,String password,{bool adminOnly=false}) async {
-    final result=await call('POST','/auth/login',{'email':email,'password':password, if(adminOnly) 'admin_only':true});
+  Future<void> login(String email,String password,{bool adminOnly=false,String? expectedRole}) async {
+    final result=await call('POST','/auth/login',{'email':email,'password':password,
+      if(adminOnly) 'admin_only':true, if(expectedRole != null) 'expected_role':expectedRole});
     token=result['token'];user=Map<String,dynamic>.from(result['user']);
     await storage.write(key: sessionKey, value: jsonEncode({'token': token, 'user': user}));
   }
