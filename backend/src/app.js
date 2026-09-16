@@ -201,15 +201,27 @@ export function createApp(pool, notify=()=>{}, options={}) {
    const {rows}=await pool.query(`select j.*,
     case when j.customer_id=$1 or j.operator_id=$1 then s.address else null end as address,
     case when j.customer_id=$1 or j.operator_id=$1 then s.store_number else null end as store_number,
-    case when j.customer_id=$1 and j.status in ('accepted','on_the_way') then codes.code else null end as start_otp
+    case when j.customer_id=$1 and j.status in ('accepted','on_the_way') then codes.code else null end as start_otp,
+    customer.phone as private_customer_phone,s.lat as private_site_lat,s.lng as private_site_lng,
+    loc.lat as private_operator_lat,loc.lng as private_operator_lng,loc.updated_at as private_location_updated
     from jobs j join job_sites s on s.job_id=j.id
+    join users customer on customer.id=j.customer_id
     left join job_start_codes codes on codes.job_id=j.id
+    left join job_locations loc on loc.job_id=j.id
     where j.customer_id=$1 or j.operator_id=$1 or
     ($2='operator' and $4 and not exists(select 1 from users where id=$1 and blocked_until>now()) and j.status='requested' and j.service=$3 and j.customer_id<>$1 and
      not exists(select 1 from jobs active where active.operator_id=$1 and active.status in ('accepted','on_the_way','working')) and
      not exists(select 1 from declines d where d.job_id=j.id and d.operator_id=$1))
     order by j.created_at desc`,[u.id,u.role,u.service,balance>-20]);
-   res.json({jobs:rows,online:u.online,balance,blocked_until:u.blocked_until,payment_required:balance<=-20});
+   const jobs=rows.map(row=>{
+     const {private_customer_phone,private_site_lat,private_site_lng,private_operator_lat,
+       private_operator_lng,private_location_updated,...job}=row;
+     const arrived=job.operator_id===u.id && ['accepted','on_the_way','working'].includes(job.status) &&
+       hasArrived({lat:private_site_lat,lng:private_site_lng},private_operator_lat===null?null:
+         {lat:private_operator_lat,lng:private_operator_lng,updated_at:private_location_updated});
+     return {...job,customer_phone:arrived?private_customer_phone:null};
+   });
+   res.json({jobs,online:u.online,balance,blocked_until:u.blocked_until,payment_required:balance<=-20});
  });
  app.post('/jobs',async(req,res)=>{
    if(req.user.role!=='customer') fail(403,'Customer account required');

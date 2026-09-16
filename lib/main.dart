@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
 import 'backend_api.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'work_location.dart';
 import 'site_picker.dart';
 import 'work_alerts.dart';
@@ -1032,6 +1033,15 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                     Padding(
                         padding: const EdgeInsets.only(top: 12),
                         child: Text('Assigned operator: ${j['operator_id']}')),
+                  if (operator && j['customer_phone'] != null)
+                    Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: FilledButton.icon(
+                            onPressed: () => launchUrl(
+                                Uri(scheme: 'tel', path: j['customer_phone'])),
+                            icon: const Icon(Icons.call),
+                            label:
+                                Text('Call customer ${j['customer_phone']}'))),
                   if (['accepted', 'on_the_way', 'working'].contains(status))
                     WorkLocation(
                         key: ValueKey('${j['id']}-$operator'),

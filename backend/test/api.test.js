@@ -32,6 +32,7 @@ test('authenticated work flow protects private fields and validates transitions'
  const other=await account('other@example.com');
  const admin=await account('admin@example.com');
  await pool.query("update users set role='admin' where id=$1",[admin.user.id]);
+ await pool.query("update users set phone='+966501112233' where id=$1",[customer.user.id]);
  await pool.query("update users set role='operator',service='Pickup van',online=true where id in ($1,$2)",[operator.user.id,other.user.id]);
  assert.equal((await api.post('/auth/login').send({email:'customer@example.com',password:'StrongPassword123',expected_role:'customer'})).status,200);
  assert.equal((await api.post('/auth/login').send({email:'customer@example.com',password:'StrongPassword123',expected_role:'operator'})).status,401);
@@ -84,7 +85,8 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal(operatorPaymentRequired.status,403);assert.match(operatorPaymentRequired.body.error,/Payment required/);
  assert.equal((await api.put('/availability').auth(operator.token,{type:'bearer'}).send({available:true})).status,403);
  assert.equal((await post(operatorDebtPath,admin.token,{id:randomUUID(),amount:20,reason:'Payment received',kind:'payment'})).status,200);
- const offers=(await get('/jobs',operator.token)).body.jobs;
+ const offersResponse=await get('/jobs',operator.token);assert.equal(offersResponse.status,200,JSON.stringify(offersResponse.body));
+ const offers=offersResponse.body.jobs;
  assert.equal(offers[0].store_number,null);assert.equal(offers[0].address,null);
  assert.equal(offers[0].offered_amount,'250.00');assert.equal(offers[0].site_lat,undefined);
  assert.equal((await get(`/jobs/${id}/location`,operator.token)).status,404);
@@ -96,6 +98,7 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.ok(!(await get('/jobs',loser.token)).body.jobs.some(job=>job.id===id));
  const accepted=(await get('/jobs',winner.token)).body.jobs[0];
  assert.equal(accepted.start_otp,null);
+ assert.equal(accepted.customer_phone,null);
  const customerJob=(await get('/jobs',customer.token)).body.jobs[0];
  assert.match(customerJob.start_otp,/^[0-9]{4}$/);
  const otp=customerJob.start_otp;
@@ -105,10 +108,12 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal((await post(`/jobs/${id}/action`,winner.token,{action:'complete'})).status,409);
  assert.equal((await api.put(`/jobs/${id}/location`).auth(loser.token,{type:'bearer'}).send({lat:1,lng:2})).status,403);
  assert.equal((await api.put(`/jobs/${id}/location`).auth(winner.token,{type:'bearer'}).send({lat:24.6,lng:46.8})).status,200);
+ assert.equal((await get('/jobs',winner.token)).body.jobs[0].customer_phone,null);
  assert.equal((await get(`/jobs/${id}/location`,customer.token)).body.position.lat,24.6);
  assert.equal((await post(`/jobs/${id}/action`,winner.token,{action:'travel'})).status,200);
  assert.equal((await post(`/jobs/${id}/action`,winner.token,{action:'start',otp})).status,409);
  await api.put(`/jobs/${id}/location`).auth(winner.token,{type:'bearer'}).send({lat:body.lat,lng:body.lng});
+ assert.equal((await get('/jobs',winner.token)).body.jobs[0].customer_phone,'+966501112233');
  await pool.query("update job_locations set updated_at=now()-interval '1 minute' where job_id=$1",[id]);
  assert.equal((await post(`/jobs/${id}/action`,winner.token,{action:'start',otp})).status,409);
  await api.put(`/jobs/${id}/location`).auth(winner.token,{type:'bearer'}).send({lat:body.lat,lng:body.lng});
@@ -128,6 +133,7 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal((await post(`/jobs/${id}/action`,winner.token,{action:'complete'})).status,409);
  await api.put(`/jobs/${id}/location`).auth(winner.token,{type:'bearer'}).send({lat:body.lat,lng:body.lng});
  assert.equal((await post(`/jobs/${id}/action`,winner.token,{action:'complete'})).status,200);
+ assert.equal((await get('/jobs',winner.token)).body.jobs.find(job=>job.id===id).customer_phone,null);
  assert.equal((await get('/jobs',customer.token)).body.balance,-4);
  assert.equal((await get('/jobs',winner.token)).body.balance,-4);
  assert.equal((await get('/jobs',stranger.token)).body.balance,0);
