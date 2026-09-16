@@ -68,9 +68,22 @@ test('authenticated work flow protects private fields and validates transitions'
    assert.equal((await post('/jobs',customer.token,{...body,...invalid})).status,400);
  }
  assert.equal((await api.get('/jobs')).status,401);
+ const customerDebtPath=`/admin/users/${customer.user.id}/balance`;
+ assert.equal((await post(customerDebtPath,admin.token,{id:randomUUID(),amount:-20,reason:'Unpaid fees'})).status,200);
+ const customerPaymentRequired=await post('/jobs',customer.token,body);
+ assert.equal(customerPaymentRequired.status,403);assert.match(customerPaymentRequired.body.error,/Payment required/);
+ assert.equal((await get('/jobs',customer.token)).body.payment_required,true);
+ assert.equal((await post(customerDebtPath,admin.token,{id:randomUUID(),amount:20,reason:'Payment received',kind:'payment'})).status,200);
  const created=await post('/jobs',customer.token,body);assert.equal(created.status,201);
  const id=created.body.id;
  assert.equal((await post('/jobs',customer.token,body)).status,409);
+ const operatorDebtPath=`/admin/users/${operator.user.id}/balance`;
+ assert.equal((await post(operatorDebtPath,admin.token,{id:randomUUID(),amount:-20,reason:'Unpaid fees'})).status,200);
+ assert.equal((await get('/jobs',operator.token)).body.jobs.length,0);
+ const operatorPaymentRequired=await post(`/jobs/${id}/action`,operator.token,{action:'accept'});
+ assert.equal(operatorPaymentRequired.status,403);assert.match(operatorPaymentRequired.body.error,/Payment required/);
+ assert.equal((await api.put('/availability').auth(operator.token,{type:'bearer'}).send({available:true})).status,403);
+ assert.equal((await post(operatorDebtPath,admin.token,{id:randomUUID(),amount:20,reason:'Payment received',kind:'payment'})).status,200);
  const offers=(await get('/jobs',operator.token)).body.jobs;
  assert.equal(offers[0].store_number,null);assert.equal(offers[0].address,null);
  assert.equal(offers[0].offered_amount,'250.00');assert.equal(offers[0].site_lat,undefined);
@@ -156,7 +169,7 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal((await post(balancePath,admin.token,{...adjustment,amount:5})).status,409);
  assert.equal((await post(balancePath,admin.token,{id:randomUUID(),amount:-2,reason:'Correction'})).status,200);
  assert.equal((await get('/jobs',winner.token)).body.balance,-2);
- assert.equal((await get(balancePath,admin.token)).body.entries.length,3);
+ assert.equal((await get(balancePath,admin.token)).body.entries.length,winner===operator?5:3);
  assert.equal((await get(balancePath,stranger.token)).status,403);
  assert.equal((await post(`/admin/users/${customer.user.id}/balance`,admin.token,{id:randomUUID(),amount:4,reason:'Customer payment'})).status,200);
  assert.equal((await get('/admin/users',admin.token)).body.users.find(u=>u.id===customer.user.id).balance,0);
@@ -182,7 +195,7 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal((await post(balancePath,admin.token,{id:randomUUID(),amount:7,reason:'Cash received',kind:'payment'})).status,200);
  assert.equal((await post(balancePath,admin.token,{id:randomUUID(),amount:3,reason:'Courtesy credit',kind:'adjustment'})).status,200);
  const dashboard=(await get('/admin/dashboard',admin.token)).body;
- assert.equal(Number(dashboard.totals.received),7);
+ assert.equal(Number(dashboard.totals.received),47);
  assert.equal(Number(dashboard.totals.fees),16);
  assert.equal(Number(dashboard.totals.completed_jobs),2);
  assert.ok(dashboard.activities.some(a=>a.description==='Work status: completed'));

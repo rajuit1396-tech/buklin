@@ -251,6 +251,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
   int get availableBalance => live
       ? balance
       : balance - 4 * jobs.where((j) => j['status'] == 'completed').length;
+  bool get paymentRequired => availableBalance <= -20;
   DateTime? blockedUntil;
   final demoBlocks = <bool, DateTime>{};
   DateTime? get restrictionEnd => live ? blockedUntil : demoBlocks[operator];
@@ -353,6 +354,10 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
   }
 
   Future<void> request() async {
+    if (paymentRequired) {
+      throw const ApiException(
+          'Payment required. Pay your balance before making a new request.');
+    }
     if (restricted)
       throw const ApiException(
           'New requests are temporarily paused after cancellation.');
@@ -632,6 +637,16 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                                               : 'Available money'),
                                           const Text(
                                               '4 Riyal is deducted when each job is completed.'),
+                                          if (paymentRequired)
+                                            const Padding(
+                                                padding:
+                                                    EdgeInsets.only(top: 12),
+                                                child: Text(
+                                                    'Payment required. Pay your balance to continue using work requests.',
+                                                    style: TextStyle(
+                                                        color: Colors.red,
+                                                        fontWeight:
+                                                            FontWeight.bold))),
                                         ]))),
                             if (restricted)
                               Padding(
@@ -640,7 +655,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                                       'Work paused after cancellation. You can ${operator ? 'accept work' : 'make new requests'} again after ${restrictionEnd!.toLocal()}.')),
                             if (operator)
                               ...operatorView(active)
-                            else if (!restricted)
+                            else if (!restricted && !paymentRequired)
                               ...customerView(active),
                             if (jobs.any((j) => ['completed', 'cancelled']
                                 .contains(j['status']))) ...[
@@ -873,7 +888,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
               ? 'Finish your current work to receive new requests.'
               : 'Receive new work orders when you are available.'),
           value: online,
-          onChanged: busy || restricted
+          onChanged: busy || restricted || paymentRequired
               ? null
               : (v) => perform(() async {
                     if (live)
@@ -892,7 +907,12 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
       if (mine.isNotEmpty) ...[
         heading('Your active work'),
         ...mine.map(jobCard)
-      ] else if (online && !restricted) ...[
+      ] else if (paymentRequired)
+        const Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+                'Payment required. Pay your balance before receiving new requests.'))
+      else if (online && !restricted) ...[
         heading('Incoming requests'),
         if (offers.isEmpty)
           const Padding(

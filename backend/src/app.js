@@ -139,11 +139,19 @@ export function createApp(pool, notify=()=>{}, options={}) {
    if(req.user.role!=='operator') fail(403,'Operator account required');
    const {available}=z.object({available:z.boolean()}).parse(req.body);
    if(available && new Date(req.user.blocked_until)>new Date()) fail(403,'Work is paused until '+new Date(req.user.blocked_until).toISOString());
+   if(available) {
+     const {rows}=await pool.query(`select coalesce((select sum(amount) from work_charges where user_id=$1),0)+
+       coalesce((select sum(amount) from balance_adjustments where user_id=$1),0) as balance`,[req.user.id]);
+     if(Number(rows[0].balance)<=-20) fail(403,'Payment required. Pay your balance to receive new requests.');
+   }
    await pool.query('update users set online=$1 where id=$2',[available,req.user.id]);
    notify();res.json({ok:true});
  });
  app.get('/jobs',async(req,res)=>{
    const u=req.user;
+   const balanceResult=await pool.query(`select (coalesce((select sum(amount) from work_charges where user_id=$1),0)+
+     coalesce((select sum(amount) from balance_adjustments where user_id=$1),0))::integer as balance`,[u.id]);
+   const balance=Number(balanceResult.rows[0].balance);
    const {rows}=await pool.query(`select j.*,
     case when j.customer_id=$1 or j.operator_id=$1 then s.address else null end as address,
     case when j.customer_id=$1 or j.operator_id=$1 then s.store_number else null end as store_number,
@@ -151,20 +159,22 @@ export function createApp(pool, notify=()=>{}, options={}) {
     from jobs j join job_sites s on s.job_id=j.id
     left join job_start_codes codes on codes.job_id=j.id
     where j.customer_id=$1 or j.operator_id=$1 or
-    ($2='operator' and not exists(select 1 from users where id=$1 and blocked_until>now()) and j.status='requested' and j.service=$3 and j.customer_id<>$1 and
+    ($2='operator' and $4 and not exists(select 1 from users where id=$1 and blocked_until>now()) and j.status='requested' and j.service=$3 and j.customer_id<>$1 and
      not exists(select 1 from jobs active where active.operator_id=$1 and active.status in ('accepted','on_the_way','working')) and
      not exists(select 1 from declines d where d.job_id=j.id and d.operator_id=$1))
-    order by j.created_at desc limit 100`,[u.id,u.role,u.service]);
-   const balance=await pool.query(`select (coalesce((select sum(amount) from work_charges where user_id=$1),0)+
-     coalesce((select sum(amount) from balance_adjustments where user_id=$1),0))::integer as balance`,[u.id]);
-   res.json({jobs:rows,online:u.online,balance:balance.rows[0].balance,blocked_until:u.blocked_until});
+    order by j.created_at desc limit 100`,[u.id,u.role,u.service,balance>-20]);
+   res.json({jobs:rows,online:u.online,balance,blocked_until:u.blocked_until,payment_required:balance<=-20});
  });
  app.post('/jobs',async(req,res)=>{
    if(req.user.role!=='customer') fail(403,'Customer account required');
    const b=requestSchema.parse(req.body),id=randomUUID();
    await transaction(pool,async c=>{
-    const account=await c.query('select blocked_until from users where id=$1 for update',[req.user.id]);
+    const account=await c.query(`select blocked_until,
+      coalesce((select sum(amount) from work_charges where user_id=$1),0)+
+      coalesce((select sum(amount) from balance_adjustments where user_id=$1),0) as balance
+      from users where id=$1 for update`,[req.user.id]);
     if(new Date(account.rows[0].blocked_until)>new Date()) fail(403,'New requests are paused until '+new Date(account.rows[0].blocked_until).toISOString());
+    if(Number(account.rows[0].balance)<=-20) fail(403,'Payment required. Pay your balance before making a new request.');
     await c.query(`insert into jobs(id,customer_id,service,loading_vehicle,offered_amount,details)
       values($1,$2,$3,$4,$5,$6)`,[id,req.user.id,b.equipment,b.loading,b.offered_amount,b.work_details]);
     await c.query('insert into job_sites values($1,$2,$3,$4,$5)',[id,b.site_address,b.store_number,b.lat,b.lng]);
@@ -193,8 +203,12 @@ export function createApp(pool, notify=()=>{}, options={}) {
       if(j.status!=='requested' || j.customer_id===u.id || j.service!==u.service) fail(409,'Request no longer available');
       if(action==='decline') { await c.query('insert into declines values($1,$2) on conflict do nothing',[id,u.id]); return; }
       if(!u.online) fail(409,'Go online first');
-      const account=await c.query('select blocked_until from users where id=$1 for update',[u.id]);
+      const account=await c.query(`select blocked_until,
+        coalesce((select sum(amount) from work_charges where user_id=$1),0)+
+        coalesce((select sum(amount) from balance_adjustments where user_id=$1),0) as balance
+        from users where id=$1 for update`,[u.id]);
       if(new Date(account.rows[0].blocked_until)>new Date()) fail(403,'Work acceptance is temporarily paused');
+      if(Number(account.rows[0].balance)<=-20) fail(403,'Payment required. Pay your balance to receive new requests.');
       const declined=await c.query('select 1 from declines where job_id=$1 and operator_id=$2',[id,u.id]);
       if(declined.rowCount) fail(409,'You declined this request');
       await c.query("update jobs set operator_id=$1,status='accepted' where id=$2",[u.id,id]);
