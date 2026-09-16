@@ -22,6 +22,8 @@ export async function transaction(pool, task) {
 }
 export function createApp(pool, notify=()=>{}, options={}) {
  const app=express();
+ // Render terminates HTTPS at its reverse proxy. Keep local requests untrusted.
+ if (process.env.TRUST_PROXY_HOPS === '1') app.set('trust proxy',1);
  app.use(helmet());
  const origins=(process.env.CORS_ORIGINS ?? 'http://localhost:8082').split(',');
  app.use(cors({origin:(origin,done)=>done(null,!origin || origins.includes(origin))}));

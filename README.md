@@ -6,6 +6,8 @@ retained only as historical migration material; do not apply it to Neon.
 
 ## Preview in Chrome
 
+For hosted deployment of the login app and API, see [RENDER.md](RENDER.md).
+
 ```powershell
 C:\flutter\bin\flutter.bat run -d chrome --web-port 8082
 ```
