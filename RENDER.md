@@ -1,5 +1,16 @@
 # Deploy Buklin on Render
 
+## Existing service: buklin-1
+
+The existing service serves the admin panel at https://buklin-1.onrender.com/
+and the customer/operator app at https://buklin-1.onrender.com/app/.
+The production Flutter bundle is committed in `backend/public/app/` so the
+existing Node service can deploy it without installing Flutter on Render.
+After Flutter source changes, run `scripts/package-render-app.ps1`, then commit
+the source and updated bundle together. The app uses the same live backend.
+
+## Optional separate web and API services
+
 `render.yaml` defines the Flutter customer/operator site and the Node API/admin
 site. The web build requires a backend URL, so it cannot silently deploy demo mode.
 The API uses the existing Neon Postgres database; no database is created by this

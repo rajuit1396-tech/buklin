@@ -24,6 +24,17 @@ export function createApp(pool, notify=()=>{}, options={}) {
  const app=express();
  // Render terminates HTTPS at its reverse proxy. Keep local requests untrusted.
  if (process.env.TRUST_PROXY_HOPS === '1') app.set('trust proxy',1);
+ // The bundled Flutter UI needs WebAssembly and map/font fetches. Scope its
+ // policy to /app so the admin panel retains Helmet's stricter defaults.
+ app.use('/app',helmet({contentSecurityPolicy:{directives:{
+   scriptSrc:["'self'","'wasm-unsafe-eval'","blob:"],
+   connectSrc:["'self'",'https:','wss:'],
+   imgSrc:["'self'",'https:','data:','blob:'],
+   fontSrc:["'self'",'https:','data:'],
+   workerSrc:["'self'",'blob:']
+ }}}),express.static(fileURLToPath(new URL('../public/app/',import.meta.url)),{
+   maxAge:0,setHeaders:res=>res.setHeader('Cache-Control','no-cache')
+ }),(_req,res)=>res.sendStatus(404));
  app.use(helmet());
  const origins=(process.env.CORS_ORIGINS ?? 'http://localhost:8082').split(',');
  app.use(cors({origin:(origin,done)=>done(null,!origin || origins.includes(origin))}));

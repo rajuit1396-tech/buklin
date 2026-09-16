@@ -1,0 +1,2 @@
+# Preserve Flutter build output byte-for-byte (including binary shader files).
+backend/public/app/** -text linguist-generated=true
