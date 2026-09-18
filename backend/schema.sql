@@ -95,3 +95,24 @@ end $$;
 create or replace trigger jobs_activity after insert or update on jobs for each row execute function log_work_activity();
 create or replace trigger users_activity after insert or update on users for each row execute function log_work_activity();
 create or replace trigger payments_activity after insert on balance_adjustments for each row execute function log_work_activity();
+
+-- Stable public request numbers, including requests created before this migration.
+create sequence if not exists job_request_numbers start 10001;
+alter table jobs add column if not exists request_number bigint
+ not null default nextval('job_request_numbers');
+create unique index if not exists jobs_request_number_unique on jobs(request_number);
+alter table jobs add column if not exists closed_at timestamptz;
+update jobs j set closed_at=coalesce((select max(a.created_at) from activity_log a
+ where a.job_id=j.id and a.description in ('Work status: completed','Work status: cancelled')),now())
+ where j.status in ('completed','cancelled') and j.closed_at is null;
+create or replace function timestamp_closed_job() returns trigger language plpgsql as $$
+begin
+ if new.status in ('completed','cancelled') then
+  if TG_OP='INSERT' then new.closed_at=now();
+  elsif old.status not in ('completed','cancelled') then new.closed_at=now();
+  end if;
+ end if;
+ return new;
+end $$;
+create or replace trigger jobs_closed_at before insert or update on jobs
+ for each row execute function timestamp_closed_job();

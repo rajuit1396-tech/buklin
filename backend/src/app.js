@@ -157,7 +157,7 @@ export function createApp(pool, notify=()=>{}, options={}) {
    const id=z.uuid().parse(req.params.id);
    const account=await pool.query("select id from users where id=$1 and role in ('customer','operator')",[id]);
    if(!account.rowCount) fail(404,'Account unavailable');
-   const {rows}=await pool.query(`select id,service,loading_vehicle,offered_amount,status,created_at,
+   const {rows}=await pool.query(`select id,request_number,closed_at,service,loading_vehicle,offered_amount,status,created_at,
      case when customer_id=$1 then 'customer' else 'operator' end as participation
      from jobs where customer_id=$1 or operator_id=$1 order by created_at desc`,[id]);
    res.json({jobs:rows,completed:rows.filter(row=>row.status==='completed').length,total:rows.length});
@@ -221,10 +221,11 @@ export function createApp(pool, notify=()=>{}, options={}) {
     join users customer on customer.id=j.customer_id
     left join job_start_codes codes on codes.job_id=j.id
     left join job_locations loc on loc.job_id=j.id
-    where j.customer_id=$1 or j.operator_id=$1 or
+    where (j.status not in ('completed','cancelled') or j.closed_at>now()-interval '3 days')
+    and (j.customer_id=$1 or j.operator_id=$1 or
     ($2='operator' and $4 and not exists(select 1 from users where id=$1 and blocked_until>now()) and j.status='requested' and j.service=$3 and j.customer_id<>$1 and
      not exists(select 1 from jobs active where active.operator_id=$1 and active.status in ('accepted','on_the_way','working')) and
-     not exists(select 1 from declines d where d.job_id=j.id and d.operator_id=$1))
+     not exists(select 1 from declines d where d.job_id=j.id and d.operator_id=$1)))
     order by j.created_at desc`,[u.id,u.role,u.service,balance>-20]);
    const jobs=rows.map(row=>{
      const {private_customer_phone,private_site_lat,private_site_lng,private_operator_lat,

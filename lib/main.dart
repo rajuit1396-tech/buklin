@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'work_location.dart';
 import 'site_picker.dart';
 import 'work_alerts.dart';
+import 'login_screen.dart';
 
 const services = ['5-finger excavator grapple', 'Pickup van', 'Big truck'];
 const serviceImages = [
@@ -18,6 +19,16 @@ const serviceImages = [
   'assets/truck.png'
 ];
 const live = backendUrl != '';
+
+String requestReference(Map<String, dynamic> job) =>
+    '#BK-${job['request_number'] ?? job['id']}';
+
+bool visibleInHistory(Map<String, dynamic> job) {
+  if (!['completed', 'cancelled'].contains(job['status'])) return false;
+  final closed = DateTime.tryParse(job['closed_at']?.toString() ?? '');
+  return closed == null ||
+      closed.isAfter(DateTime.now().subtract(const Duration(days: 3)));
+}
 
 String? amountError(String? value) {
   final text = value?.trim() ?? '';
@@ -246,6 +257,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
   }
 
   final hidden = <String>{};
+  final seenIncomingRequests = <String>{};
   List<Map<String, dynamic>> jobs = [];
   int selected = 0;
   int balance = 0;
@@ -310,6 +322,79 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
           blockedUntil =
               DateTime.tryParse(result['blocked_until']?.toString() ?? '');
         });
+        WorkAlerts.retainIncomingRequests(operator && online
+            ? jobs
+                .where((job) => job['status'] == 'requested')
+                .map((job) => job['id'].toString())
+                .toSet()
+            : <String>{});
+        final foreground = WidgetsBinding.instance.lifecycleState == null ||
+            WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+        final newlyRequested = operator && online && foreground
+            ? jobs
+                .where((job) =>
+                    job['status'] == 'requested' &&
+                    !seenIncomingRequests.contains(job['id'].toString()))
+                .toList()
+            : <Map<String, dynamic>>[];
+        if (newlyRequested.isNotEmpty) {
+          for (final job in newlyRequested) {
+            seenIncomingRequests.add(job['id'].toString());
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+              if (!mounted) return;
+              final alertId = job['id'].toString();
+              if (!online ||
+                  !jobs.any((j) =>
+                      j['id'] == job['id'] && j['status'] == 'requested'))
+                return;
+              await WorkAlerts.startIncomingRequestAlert(alertId);
+              if (!mounted) {
+                await WorkAlerts.stopIncomingRequestAlert(alertId);
+                return;
+              }
+              try {
+                await showDialog<void>(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => AlertDialog(
+                      title: Text('New request ${requestReference(job)}'),
+                      content: SizedBox(
+                          width: 420,
+                          child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(job['service']),
+                                const SizedBox(height: 8),
+                                Text(
+                                    'Customer offer: ${num.parse(job['offered_amount'].toString()).toStringAsFixed(0)} Riyal'),
+                                const SizedBox(height: 8),
+                                if (job['loading_vehicle'] != null)
+                                  Text('Vehicle: ${job['loading_vehicle']}'),
+                                const SizedBox(height: 8),
+                                if (job['address'] != null)
+                                  Text(job['address']),
+                              ])),
+                      actions: [
+                        TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Later')),
+                        FilledButton(
+                            onPressed: () async {
+                              Navigator.pop(context);
+                              if (mounted) {
+                                await perform(() => change(job, 'accept'));
+                              }
+                            },
+                            child: const Text('Accept request'))
+                      ]),
+                );
+              } finally {
+                await WorkAlerts.stopIncomingRequestAlert(alertId);
+              }
+            });
+          }
+        }
         if (completed) returnHomeAfterWork();
       }
     } on ApiException catch (e) {
@@ -408,6 +493,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
       setState(() => jobs.insert(0, {
             ...row,
             'id': DateTime.now().microsecondsSinceEpoch.toString(),
+            'request_number': DateTime.now().microsecondsSinceEpoch.toString(),
             'status': 'requested'
           }));
     }
@@ -495,6 +581,9 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
               Random.secure().nextInt(10000).toString().padLeft(4, '0');
         }
         if (action == 'start') job.remove('start_otp');
+        if (action == 'complete' || action == 'cancel') {
+          job['closed_at'] = DateTime.now().toUtc().toIso8601String();
+        }
       });
       if (action == 'complete') returnHomeAfterWork();
     }
@@ -516,6 +605,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
       controller.removeListener(saveState);
     }
     scroll.dispose();
+    WorkAlerts.stopIncomingRequestAlert();
     if (live) db.closeEvents();
     poll?.cancel();
     channel?.cancel();
@@ -543,6 +633,25 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    if (!signedIn) {
+      return LoginScreen(
+          username: email,
+          password: password,
+          role: loginRole,
+          busy: busy,
+          message: message,
+          onRoleChanged: (role) => setState(() => loginRole = role),
+          onSubmit: () {
+            FocusScope.of(context).unfocus();
+            perform(() async {
+              await db.login(email.text.trim(), password.text,
+                  expectedRole: loginRole);
+              password.clear();
+              restoreWork();
+              connect();
+            });
+          });
+    }
     final active = jobs
         .where((j) => !['completed', 'cancelled'].contains(j['status']))
         .toList();
@@ -606,9 +715,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                                 child: Text(message!,
                                     style: const TextStyle(
                                         color: Color(0xFF9E3400)))),
-                          if (!signedIn)
-                            ...login()
-                          else ...[
+                          ...[
                             if (!live)
                               Padding(
                                   padding: const EdgeInsets.only(top: 16),
@@ -665,65 +772,19 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                               ...operatorView(active)
                             else if (!restricted && !paymentRequired)
                               ...customerView(active),
-                            if (jobs.any((j) => ['completed', 'cancelled']
-                                .contains(j['status']))) ...[
+                            if (jobs.any(visibleInHistory)) ...[
                               heading('Recent work'),
-                              ...jobs
-                                  .where((j) => ['completed', 'cancelled']
-                                      .contains(j['status']))
-                                  .map(jobCard)
+                              const Padding(
+                                  padding: EdgeInsets.only(bottom: 12),
+                                  child: Text(
+                                      'Completed and cancelled requests stay here for 3 days.')),
+                              ...jobs.where(visibleInHistory).map(jobCard)
                             ],
                           ],
                           const SizedBox(height: 24),
                         ])))));
   }
 
-  List<Widget> login() => [
-        Image.asset('assets/buklin-logo.png', height: 180),
-        heading('Sign in to Buklin'),
-        const Text('Accounts are created only by the Buklin administrator.'),
-        const SizedBox(height: 20),
-        SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(
-                  value: 'customer',
-                  label: Text('Customer'),
-                  icon: Icon(Icons.person_outline)),
-              ButtonSegment(
-                  value: 'operator',
-                  label: Text('Operator'),
-                  icon: Icon(Icons.engineering)),
-            ],
-            selected: {
-              loginRole
-            },
-            onSelectionChanged: busy
-                ? null
-                : (roles) => setState(() => loginRole = roles.first)),
-        const SizedBox(height: 20),
-        Text('${loginRole == 'operator' ? 'Operator' : 'Customer'} login',
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
-        TextField(
-            controller: email,
-            decoration: const InputDecoration(labelText: 'Username or email')),
-        const SizedBox(height: 12),
-        TextField(
-            controller: password,
-            obscureText: true,
-            decoration: const InputDecoration(labelText: 'Password')),
-        const SizedBox(height: 16),
-        button('Sign in', () async {
-          await db.login(email.text.trim(), password.text,
-              expectedRole: loginRole);
-          password.clear();
-          restoreWork();
-          connect();
-        }),
-        const SizedBox(height: 8),
-        const Text(
-            'No account? Contact the administrator. Public registration is disabled.'),
-      ];
   List<Widget> customerView(List<Map<String, dynamic>> active) => [
         if (active.isEmpty) ...[
           heading([
@@ -903,6 +964,10 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
           onChanged: busy || restricted || paymentRequired
               ? null
               : (v) => perform(() async {
+                    if (v && live) {
+                      final alertMessage = await WorkAlerts.enable();
+                      if (mounted) setState(() => message = alertMessage);
+                    }
                     if (live)
                       await db.call('PUT', '/availability', {'available': v});
                     setState(() => online = v);
@@ -966,6 +1031,12 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  SelectableText(requestReference(j),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                          color: Color(0xFF25313B))),
+                  const SizedBox(height: 8),
                   Text(labels[status] ?? status,
                       style: const TextStyle(
                           color: Color(0xFFBC4F00),

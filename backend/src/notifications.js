@@ -24,7 +24,9 @@ export function startNotifications(pool) {
         headers:{'Content-Type':'application/json',Authorization:`Key ${process.env.ONESIGNAL_REST_API_KEY}`},
         body:JSON.stringify({app_id:process.env.ONESIGNAL_APP_ID,target_channel:'push',
          include_aliases:{external_id:operators.map(o=>o.id)},idempotency_key:event.id,
-         headings:{en:'New Buklin work order'},
+         existing_android_channel_id:'buklin_work_v1',priority:10,
+         android_sound:'default',android_vibration_pattern:[0,400,200,400],
+         headings:{en:`New request #BK-${job.request_number}`},
          contents:{en:`${job.service} • ${job.loading_vehicle} • Customer offer: ${Number(job.offered_amount).toFixed(0)} Riyal. Open to accept.`},
          data:{job_id:job.id}})});
       const result=await response.json();if(!response.ok || !result.id)throw new Error('Push rejected');

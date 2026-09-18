@@ -232,5 +232,21 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.ok(dashboard.activities.some(a=>a.description==='Work status: completed'));
  assert.ok(dashboard.activities.some(a=>a.description.includes('Cash received')));
  assert.equal((await post(balancePath,admin.token,{id:randomUUID(),amount:-3,reason:'Invalid payment',kind:'payment'})).status,400);
+ // References are stable and unique; history expiry never changes billing.
+ const numbered=await pool.query('select request_number,closed_at from jobs');
+ assert.equal(new Set(numbered.rows.map(j=>String(j.request_number))).size,numbered.rows.length);
+ assert.ok(numbered.rows.every(j=>Number(j.request_number)>=10001));
+ assert.ok((await pool.query('select closed_at from jobs where id=$1',[finalJob])).rows[0].closed_at);
+ await pool.query("update jobs set closed_at=now()-interval '71 hours' where id=$1",[finalJob]);
+ assert.ok((await get('/jobs',winner.token)).body.jobs.some(j=>j.id===finalJob));
+ await pool.query("update jobs set closed_at=now()-interval '73 hours' where id=$1",[finalJob]);
+ assert.ok(!(await get('/jobs',winner.token)).body.jobs.some(j=>j.id===finalJob));
+ assert.ok(!(await get('/jobs',stranger.token)).body.jobs.some(j=>j.id===finalJob));
+ assert.equal((await get('/jobs',winner.token)).body.balance,25);
+ assert.ok((await pool.query('select id from jobs where id=$1',[finalJob])).rows.length);
+ // Applying the schema again must not renumber requests or reset their expiry.
+ const before=await pool.query('select request_number,closed_at from jobs where id=$1',[finalJob]);
+ await db.exec(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
+ assert.deepEqual((await pool.query('select request_number,closed_at from jobs where id=$1',[finalJob])).rows,before.rows);
  }finally{await db.close();}
 });

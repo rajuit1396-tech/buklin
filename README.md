@@ -56,11 +56,32 @@ server running: its outbox worker retries failed messages up to eight times.
 Monitor notification_outbox for exhausted attempts. No Google/OneSignal credentials
 have been provisioned here. Phone notification delivery remains unverified.
 
+Going online requests notification permission. Incoming requests use native Android
+sound and vibration in the foreground and the `buklin_work_v1` notification channel
+for background push alerts. Closing or swiping away the app keeps the operator's
+server-side online status, so push alerts continue while online and available.
+Force-stopping the app in Android settings prevents delivery until it is reopened.
+Notification permission, phone sound settings and Do Not Disturb still apply.
+Install the updated Android build and open it once to create the channel; deploy
+the updated backend with the OneSignal configuration to send background alerts.
+
+While an incoming request dialog is open, its tone and vibration repeat every
+three seconds. They stop when all pending dialogs are dismissed or accepted,
+when refreshed requests are no longer available, or when the user signs out.
+Background push notifications still use a single notification tone; the repeating
+dialog alert requires the app to be running.
+
 The push payload includes the equipment, loading vehicle and offer amount only.
 Exact location and the three-digit store number are returned only to the customer
 or assigned operator after acceptance, never to other operators.
 
 ## Data and live updates
+
+Requests have a unique sequential reference such as `#BK-10001`. Run `npm run migrate`
+before deploying this version; existing requests receive numbers as well. Completed
+and cancelled requests disappear from customer/operator history 72 hours after
+closing. Billing and admin audit records are retained. Existing closed requests
+use their recorded closing activity time, or migration time if none is available.
 
 Neon stores users, hashed passwords, hashed session tokens, jobs, fixed loading
 options, offers, private site details, positions, declines and notification outbox.
