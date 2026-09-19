@@ -37,9 +37,10 @@
             <label>Full name<input name="name" minlength="2" maxlength="100" required></label>
             <label>Phone<input name="phone" inputmode="tel" placeholder="+966501234567" required></label>
             <label>Username<input name="username" pattern="[a-zA-Z0-9_]{3,40}" required></label>
-            <label>Temporary password<input name="password" type="password" minlength="10" required></label>
+            <label>Password<input id="accountPassword" name="password" type="password" autocomplete="new-password" minlength="10" required></label>
+            <button id="showPasswordButton" class="ghost" type="button" aria-controls="accountPassword" aria-pressed="false">Show password</button>
             <label>Account type<select name="role" id="roleSelect"><option value="customer">Customer</option><option value="operator">Operator</option></select></label>
-            <label id="serviceField" hidden>Operator machine<select name="service"><option value="5-finger excavator grapple">5-finger excavator grapple</option><option value="Pickup van">Pickup van</option><option value="Big truck">Big truck</option></select></label>
+            <label id="serviceField" hidden>Operator machine<select id="serviceSelect" name="service" disabled><option value="5-finger excavator grapple">5-finger excavator grapple</option><option value="Pickup van">Pickup van</option><option value="Big truck">Big truck</option></select></label>
             <button type="submit">Create account</button>
           </form>
         </section>
