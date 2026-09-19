@@ -45,8 +45,22 @@ async function setBalance(user){const raw=prompt(`Set the exact balance for ${us
 async function showJobs(user){try{const data=await api(`/admin/users/${user.id}/jobs`);const lines=data.jobs.slice(0,12).map(job=>`#BK-${job.request_number ?? job.id} · ${new Date(job.created_at).toLocaleDateString()} · ${job.service} · ${job.status} · ${job.participation}`);alert(`${user.name}\nCompleted: ${data.completed}\nTotal work records: ${data.total}\n\n${lines.join('\n')||'No work history'}`);}catch(error){notice(error.message,true);}}
 async function deleteAccount(user){if(!confirm(`Delete ${user.name}'s ${user.role} account? Any unfinished request will be cancelled and the user will be signed out.`))return;try{await api(`/admin/users/${user.id}`,{method:'DELETE'});notice('Account deleted.');await refresh();}catch(error){notice(error.message,true);}}
 async function clearRestriction(user){try{await api(`/admin/users/${user.id}/clear-restriction`,{method:'POST'});notice('Restriction cleared.');await refresh();}catch(error){notice(error.message,true);}}
-byId('loginForm').addEventListener('submit',async event=>{event.preventDefault();const button=event.submitter;button.disabled=true;try{const values=new FormData(event.currentTarget);const data=await api('/auth/login',{method:'POST',body:JSON.stringify({email:values.get('email').trim(),password:values.get('password'),admin_only:true})});token=data.token;sessionStorage.setItem('buklinAdminToken',token);sessionStorage.setItem('buklinAdminUser',JSON.stringify(data.user));showPanel(data.user);event.currentTarget.reset();await refresh();}catch(error){notice(error.message,true);}finally{button.disabled=false;}});
-byId('accountForm').addEventListener('submit',async event=>{event.preventDefault();const button=event.submitter;button.disabled=true;try{const values=new FormData(event.currentTarget);const role=values.get('role');await api('/admin/users',{method:'POST',body:JSON.stringify({name:values.get('name'),phone:values.get('phone'),username:values.get('username'),password:values.get('password'),role,store_number:role==='customer'?values.get('store_number'):null,service:role==='operator'?values.get('service'):null})});notice('Account created.');event.currentTarget.reset();byId('roleSelect').dispatchEvent(new Event('change'));await refresh();}catch(error){notice(error.message,true);}finally{button.disabled=false;}});
+byId('loginForm').addEventListener('submit',async event=>{event.preventDefault();const form=event.currentTarget;const button=event.submitter;button.disabled=true;try{const values=new FormData(form);const data=await api('/auth/login',{method:'POST',body:JSON.stringify({email:values.get('email').trim(),password:values.get('password'),admin_only:true})});token=data.token;sessionStorage.setItem('buklinAdminToken',token);sessionStorage.setItem('buklinAdminUser',JSON.stringify(data.user));showPanel(data.user);form.reset();await refresh();}catch(error){notice(error.message,true);}finally{button.disabled=false;}});
+byId('accountForm').addEventListener('submit',async event=>{
+  event.preventDefault();const form=event.currentTarget;const button=event.submitter;
+  if(button.disabled)return;
+  button.disabled=true;button.textContent='Creating account...';
+  const result=byId('accountResult');result.hidden=false;result.className='account-result';result.textContent='Creating account...';
+  try{
+    const values=new FormData(form);const role=values.get('role');
+    const data=await api('/admin/users',{method:'POST',body:JSON.stringify({name:values.get('name'),phone:values.get('phone'),username:values.get('username'),password:values.get('password'),role,store_number:role==='customer'?values.get('store_number'):null,service:role==='operator'?values.get('service'):null})});
+    form.reset();syncAccountType();
+    result.className='account-result success';result.textContent='Account created successfully for @'+data.user.username+'.';
+    notice('Account created successfully.');
+    await refresh();
+  }catch(error){result.className='account-result error';result.textContent=error.message;notice(error.message,true);}
+  finally{button.disabled=false;button.textContent='Create account';}
+});
 function syncAccountType(){const isOperator=byId('roleSelect').value==='operator';byId('serviceField').hidden=!isOperator;byId('serviceSelect').disabled=!isOperator;byId('serviceSelect').required=isOperator;byId('storeField').hidden=isOperator;byId('storeNumber').disabled=isOperator;byId('storeNumber').required=!isOperator;}
 function setPasswordVisible(visible){byId('accountPassword').type=visible?'text':'password';byId('showPasswordButton').textContent=visible?'Hide password':'Show password';byId('showPasswordButton').setAttribute('aria-pressed',String(visible));}
 byId('showPasswordButton').addEventListener('click',()=>setPasswordVisible(byId('accountPassword').type==='password'));

@@ -236,7 +236,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
     if (scroll.hasClients) scroll.jumpTo(0);
   }
 
-  void returnHomeAfterWork() {
+  void returnHomeAfterWork({bool completed = true}) {
     setState(() {
       page = 0;
       selected = 0;
@@ -250,8 +250,9 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
       ]) {
         controller.clear();
       }
-      message = 'Work completed.';
+      message = completed ? 'Work completed.' : null;
     });
+    saveState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && scroll.hasClients) scroll.jumpTo(0);
     });
@@ -669,6 +670,16 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
             title: Image.asset('assets/buklin-logo.png',
                 height: 48, fit: BoxFit.contain, semanticLabel: 'Buklin'),
             actions: [
+              if (!operator &&
+                  active.isEmpty &&
+                  !restricted &&
+                  !paymentRequired)
+                IconButton(
+                    tooltip: 'Home',
+                    icon: const Icon(Icons.home_outlined),
+                    onPressed: busy
+                        ? null
+                        : () => returnHomeAfterWork(completed: false)),
               if (live && signedIn)
                 IconButton(
                     tooltip: 'Sign out',
