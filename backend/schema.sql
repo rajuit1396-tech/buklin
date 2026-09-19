@@ -11,6 +11,8 @@ create table if not exists sessions (
 );
 alter table users add column if not exists blocked_until timestamptz;
 alter table users add column if not exists deleted_at timestamptz;
+alter table users add column if not exists store_number text
+ check(store_number ~ '^[0-9]{3}$');
 create table if not exists jobs (
  id uuid primary key, customer_id uuid not null references users(id), operator_id uuid references users(id),
  service text not null check(service in ('5-finger excavator grapple','Pickup van','Big truck')),

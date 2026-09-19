@@ -18,7 +18,7 @@ test('authenticated work flow protects private fields and validates transitions'
  const app=createApp(pool,()=>{},{testing:true});
  const api=request(app);
  const account=async(email)=>{
-   await pool.query('insert into users(id,email,password_hash) values($1,$2,$3)',[randomUUID(),email,await hashPassword('StrongPassword123')]);
+   await pool.query("insert into users(id,email,password_hash,store_number) values($1,$2,$3,'007')",[randomUUID(),email,await hashPassword('StrongPassword123')]);
    const r=await api.post('/auth/login').send({email,password:'StrongPassword123'});assert.equal(r.status,200);return r.body;
  };
  try {
@@ -62,10 +62,24 @@ test('authenticated work flow protects private fields and validates transitions'
    assert.equal(createdUser.status,201);assert.equal(createdUser.body.user.service,service);
    assert.equal(createdUser.body.user.password,undefined);assert.equal(createdUser.body.user.password_hash,undefined);
  }
- const customerCreated=await post('/admin/users',admin.token,{...newAccount,role:'customer',service:null,username:'new_customer'});
+ const customerCreated=await post('/admin/users',admin.token,{...newAccount,role:'customer',service:null,store_number:'007',username:'new_customer'});
  assert.equal(customerCreated.status,201);assert.equal(customerCreated.body.user.service,null);
  const loggedIn=await api.post('/auth/login').send({email:'NEW_CUSTOMER',password:newAccount.password});
  assert.equal(loggedIn.status,200);assert.equal(loggedIn.body.user.role,'customer');
+ assert.equal(loggedIn.body.user.store_number,'007');
+ assert.equal((await get('/me',loggedIn.body.token)).body.store_number,'007');
+ for(const store_number of [undefined,null,'','12','abc']) {
+   assert.equal((await post('/admin/users',admin.token,{...newAccount,role:'customer',service:null,store_number,username:'invalid_store'})).status,400);
+ }
+ assert.equal((await post('/jobs',customer.token,{...body,store_number:'999'})).status,400);
+ await pool.query('update users set store_number=null where id=$1',[stranger.user.id]);
+ assert.equal((await post('/jobs',stranger.token,body)).status,403);
+ const assignStorePath=`/admin/users/${stranger.user.id}/store-number`;
+ assert.equal((await post(assignStorePath,customer.token,{store_number:'007'})).status,403);
+ assert.equal((await post(assignStorePath,admin.token,{store_number:'7'})).status,400);
+ assert.equal((await post(assignStorePath,admin.token,{store_number:'007'})).status,200);
+ assert.equal((await post(assignStorePath,admin.token,{store_number:'008'})).status,409);
+ assert.equal((await get('/jobs',stranger.token)).body.store_number,'007');
  assert.equal((await post('/admin/users',admin.token,{...newAccount,username:'new_customer'})).status,409);
  const directory=await get('/admin/users',admin.token);
  assert.equal(directory.status,200);
@@ -81,7 +95,8 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal(customerPaymentRequired.status,403);assert.match(customerPaymentRequired.body.error,/Payment required/);
  assert.equal((await get('/jobs',customer.token)).body.payment_required,true);
  assert.equal((await post(customerDebtPath,admin.token,{id:randomUUID(),amount:20,reason:'Payment received',kind:'payment'})).status,200);
- const created=await post('/jobs',customer.token,body);assert.equal(created.status,201);
+ const {store_number: ignoredStore,...fixedStoreRequest}=body;
+ const created=await post('/jobs',customer.token,fixedStoreRequest);assert.equal(created.status,201);
  const id=created.body.id;
  assert.equal((await post('/jobs',customer.token,body)).status,409);
  const operatorDebtPath=`/admin/users/${operator.user.id}/balance`;
@@ -222,7 +237,7 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal((await get('/me',loggedIn.body.token)).status,401);
  const archived=(await get('/admin/users',admin.token)).body.users.find(u=>u.id===customerCreated.body.user.id);
  assert.ok(archived.deleted_at);assert.equal((await get(`/admin/users/${archived.id}/jobs`,admin.token)).status,200);
- assert.equal((await post('/admin/users',admin.token,{...newAccount,role:'customer',service:null,username:'new_customer'})).status,201);
+ assert.equal((await post('/admin/users',admin.token,{...newAccount,role:'customer',service:null,store_number:'007',username:'new_customer'})).status,201);
  const dashboard=(await get('/admin/dashboard',admin.token)).body;
  assert.equal(Number(dashboard.totals.received),47);
  assert.equal(Number(dashboard.totals.fees),20);

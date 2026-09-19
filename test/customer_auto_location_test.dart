@@ -51,8 +51,16 @@ void main() {
         find.widgetWithText(TextFormField, 'Amount you want to give'), '250');
     await tester.tap(find.text('Next: work location'));
     await tester.pumpAndSettle();
-    await tester.enterText(
-        find.widgetWithText(TextFormField, 'Store number'), '007');
+    final store = tester.widget<TextFormField>(
+        find.widgetWithText(TextFormField, 'Store number'));
+    expect(store.initialValue, '007');
+    expect(
+        tester
+            .widget<TextField>(find.descendant(
+                of: find.widgetWithText(TextFormField, 'Store number'),
+                matching: find.byType(TextField)))
+            .readOnly,
+        isTrue);
     await tester.scrollUntilVisible(find.text('Search for an operator'), 300,
         scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Search for an operator'));

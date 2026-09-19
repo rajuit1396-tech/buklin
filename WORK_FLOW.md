@@ -6,7 +6,8 @@ The old supabase/ files are inactive historical artifacts.
 1. Choose work equipment: 5-finger excavator grapple, Pickup van, or Big truck.
 2. Choose Dyna, Trailer, or Inside store. Custom names are not allowed.
    A three-digit whole amount from 100 to 999 Riyal is required.
-3. Enter exactly three digits for the store number (007 is valid). Drag the map
+3. The admin assigns a fixed three-digit store number when creating the customer
+   account (007 is valid). Customers cannot edit it. Drag the map
    to set the work pin, or use current GPS. Both store number and pin are required.
 4. Search for an operator. Waiting requests may be cancelled by the customer.
 5. Available operators see equipment, loading type and offer amount. Exact location

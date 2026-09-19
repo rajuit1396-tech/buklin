@@ -9,7 +9,9 @@ export const accountFields = z.object({
 export const adminAccount = accountFields.extend({
   role:z.enum(['customer','operator']),
   service:z.enum(machineTypes).nullable().optional(),
+  store_number:z.string().regex(/^[0-9]{3}$/).nullable().optional(),
 }).superRefine((value,context)=>{
+  if(value.role==='customer' && !value.store_number) context.addIssue({code:'custom',path:['store_number'],message:'Enter a three-digit store number'});
   if(value.role==='operator' && !value.service) context.addIssue({code:'custom',path:['service'],message:'Select a machine'});
   if(value.role==='customer' && value.service) context.addIssue({code:'custom',path:['service'],message:'Customers have no machine'});
 });

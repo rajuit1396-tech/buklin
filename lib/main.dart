@@ -154,7 +154,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
   Future<void> pendingSave = Future.value();
   bool restoring = true;
   List<TextEditingController> get draftFields =>
-      [offeredAmount, storeNumber, address, details, latitude, longitude];
+      [offeredAmount, address, details, latitude, longitude];
   void saveState() {
     if (restoring || widget.preferences == null) return;
     final key = stateKey;
@@ -197,6 +197,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
       (data['demoBlocks'] as Map)
           .forEach((k, v) => demoBlocks[k == 'true'] = DateTime.parse(v));
       final fields = List<String>.from(data['fields']);
+      if (fields.length == 6) fields.removeAt(1);
       for (var i = 0; i < draftFields.length; i++) {
         draftFields[i].text = fields[i];
       }
@@ -225,7 +226,8 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
   final offeredAmount = TextEditingController();
   final latitude = TextEditingController(), longitude = TextEditingController();
   static const loadingVehicles = ['Dyna', 'Trailer', 'Inside store'];
-  final storeNumber = TextEditingController();
+  String get accountStoreNumber =>
+      live ? (db.user?['store_number']?.toString() ?? '') : '007';
   String? loadingVehicle;
   int page = 0;
   final scroll = ScrollController();
@@ -241,7 +243,6 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
       loadingVehicle = null;
       for (final controller in [
         offeredAmount,
-        storeNumber,
         address,
         details,
         latitude,
@@ -317,6 +318,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                     .contains(previous['status'])));
         setState(() {
           if (operator) online = result['online'] == true;
+          db.user?['store_number'] = result['store_number'];
           jobs = updatedJobs;
           balance = (result['balance'] as num?)?.toInt() ?? 0;
           blockedUntil =
@@ -470,7 +472,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
       'customer_id': userId,
       'service': services[selected],
       'loading_vehicle': loadingVehicle,
-      'store_number': storeNumber.text,
+      'store_number': accountStoreNumber,
       'offered_amount': double.parse(offeredAmount.text.trim()),
       'site_lat': double.parse(latitude.text),
       'site_lng': double.parse(longitude.text),
@@ -481,7 +483,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
       await db.call('POST', '/jobs', {
         'equipment': services[selected],
         'loading': loadingVehicle,
-        'store_number': storeNumber.text,
+        'store_number': accountStoreNumber,
         'offered_amount': offeredAmount.text.trim(),
         'site_address': address.text.trim(),
         'work_details': details.text.trim(),
@@ -616,7 +618,6 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
       password,
       latitude,
       longitude,
-      storeNumber,
       offeredAmount
     ]) {
       c.dispose();
@@ -707,6 +708,15 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                                 color: const Color(0xFFFFE6CD),
                                 child: const Text(
                                     'LOCAL DEMO • Requests stay on this device. Switch roles to try accepting work.')),
+                          if (!operator)
+                            ListTile(
+                                leading: const Icon(Icons.store),
+                                title: Text(
+                                    'Store number: ${accountStoreNumber.isEmpty ? 'Not assigned' : accountStoreNumber}'),
+                                subtitle: Text(accountStoreNumber.isEmpty
+                                    ? 'Contact admin to assign your store number'
+                                    : 'Assigned by admin'),
+                                trailing: const Icon(Icons.lock_outline)),
                           if (busy) const LinearProgressIndicator(),
                           if (message != null)
                             Padding(
@@ -907,21 +917,17 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
           Form(
               key: form,
               child: TextFormField(
-                controller: storeNumber,
-                keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(3)
-                ],
-                maxLength: 3,
+                key: ValueKey(accountStoreNumber),
+                initialValue: accountStoreNumber,
+                readOnly: true,
                 decoration: const InputDecoration(
                     labelText: 'Store number',
-                    hintText: 'e.g. 007',
-                    helperText: 'Required • Exactly 3 digits'),
+                    helperText: 'Assigned by admin',
+                    suffixIcon: Icon(Icons.lock_outline)),
                 validator: (value) =>
                     RegExp(r'^[0-9]{3}$').hasMatch(value ?? '')
                         ? null
-                        : 'Enter exactly 3 digits',
+                        : 'Contact admin to assign your store number',
               )),
           const SizedBox(height: 12),
           SitePicker(

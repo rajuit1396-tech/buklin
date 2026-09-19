@@ -11,7 +11,7 @@ import {fileURLToPath} from 'node:url';
 const publicDirectory=fileURLToPath(new URL('../public/',import.meta.url));
 const point = z.object({lat:z.number().min(-90).max(90),lng:z.number().min(-180).max(180)});
 const requestSchema = point.extend({equipment:z.enum(['5-finger excavator grapple','Pickup van','Big truck']),
- loading:z.enum(['Dyna','Trailer','Inside store']),store_number:z.string().regex(/^[0-9]{3}$/),
+ loading:z.enum(['Dyna','Trailer','Inside store']),store_number:z.string().regex(/^[0-9]{3}$/).optional(),
  offered_amount:z.string().regex(/^(?:[3-9][0-9]|[1-9][0-9]{2})$/),
  site_address:z.string().min(5).max(300),work_details:z.string().min(10).max(1000)});
 const fail = (status,message) => { throw Object.assign(new Error(message),{status}); };
@@ -48,7 +48,7 @@ export function createApp(pool, notify=()=>{}, options={}) {
    const token=randomBytes(32).toString('hex');
    await pool.query("insert into sessions values($1,$2,now()+interval '7 days')",[tokenHash(token),user.id]);
    res.json({token,user:{id:user.id,email:user.email,name:user.name,phone:user.phone,username:user.username,
-     role:user.role,service:user.service,online:user.online}});
+     role:user.role,service:user.service,store_number:user.store_number,online:user.online}});
  }
  app.post('/auth/register',authLimit,async(req,res)=>{
    fail(403,'Self-registration is disabled. Contact the admin to create your account.');
@@ -76,7 +76,7 @@ export function createApp(pool, notify=()=>{}, options={}) {
  app.get('/admin/users',async(req,res)=>{
    const search=z.string().max(100).parse(req.query.search ?? '');
    const offset=z.coerce.number().int().min(0).max(10000000).parse(req.query.offset ?? 0);
-   const {rows}=await pool.query(`select id,name,phone,username,email,role,service,online,blocked_until,deleted_at,
+   const {rows}=await pool.query(`select id,name,phone,username,email,role,service,store_number,online,blocked_until,deleted_at,
      (coalesce((select sum(amount) from work_charges where user_id=users.id),0)+
       coalesce((select sum(amount) from balance_adjustments where user_id=users.id),0))::integer as balance from users
      where role in ('customer','operator') and
@@ -182,10 +182,19 @@ export function createApp(pool, notify=()=>{}, options={}) {
  app.post('/admin/users',async(req,res)=>{
    const body=adminAccount.parse(req.body);
    const hash=await hashPassword(body.password);
-   const {rows}=await pool.query(`insert into users(id,name,phone,username,password_hash,role,service)
-     values($1,$2,$3,$4,$5,$6,$7) returning id,name,phone,username,role,service`,
-     [randomUUID(),body.name,body.phone,body.username,hash,body.role,body.role==='operator'?body.service:null]);
+   const {rows}=await pool.query(`insert into users(id,name,phone,username,password_hash,role,service,store_number)
+     values($1,$2,$3,$4,$5,$6,$7,$8) returning id,name,phone,username,role,service,store_number`,
+     [randomUUID(),body.name,body.phone,body.username,hash,body.role,body.role==='operator'?body.service:null,body.role==='customer'?body.store_number:null]);
    res.status(201).json({user:rows[0]});
+ });
+ app.post('/admin/users/:id/store-number',async(req,res)=>{
+   const id=z.uuid().parse(req.params.id);
+   const {store_number}=z.object({store_number:z.string().regex(/^[0-9]{3}$/)}).parse(req.body);
+   const {rows}=await pool.query(`update users set store_number=$2
+     where id=$1 and role='customer' and deleted_at is null and store_number is null
+     returning id,store_number`,[id,store_number]);
+   if(!rows.length) fail(409,'Store number is already fixed or the customer account is unavailable.');
+   notify();res.json({user:rows[0]});
  });
  app.post('/auth/logout',async(req,res)=>{
    await transaction(pool,async c=>{
@@ -235,21 +244,23 @@ export function createApp(pool, notify=()=>{}, options={}) {
          {lat:private_operator_lat,lng:private_operator_lng,updated_at:private_location_updated});
      return {...job,customer_phone:arrived?private_customer_phone:null};
    });
-   res.json({jobs,online:u.online,balance,blocked_until:u.blocked_until,payment_required:balance<=-20});
+   res.json({jobs,store_number:u.store_number,online:u.online,balance,blocked_until:u.blocked_until,payment_required:balance<=-20});
  });
  app.post('/jobs',async(req,res)=>{
    if(req.user.role!=='customer') fail(403,'Customer account required');
    const b=requestSchema.parse(req.body),id=randomUUID();
    await transaction(pool,async c=>{
-    const account=await c.query(`select blocked_until,
+    const account=await c.query(`select blocked_until,store_number,
       coalesce((select sum(amount) from work_charges where user_id=$1),0)+
       coalesce((select sum(amount) from balance_adjustments where user_id=$1),0) as balance
       from users where id=$1 for update`,[req.user.id]);
+    if(!account.rows[0].store_number) fail(403,'Contact admin to assign your account store number.');
+    if(b.store_number !== undefined && b.store_number !== account.rows[0].store_number) fail(400,'Store number is fixed to your account.');
     if(new Date(account.rows[0].blocked_until)>new Date()) fail(403,'New requests are paused until '+new Date(account.rows[0].blocked_until).toISOString());
     if(Number(account.rows[0].balance)<=-20) fail(403,'Payment required. Pay your balance before making a new request.');
     await c.query(`insert into jobs(id,customer_id,service,loading_vehicle,offered_amount,details)
       values($1,$2,$3,$4,$5,$6)`,[id,req.user.id,b.equipment,b.loading,b.offered_amount,b.work_details]);
-    await c.query('insert into job_sites values($1,$2,$3,$4,$5)',[id,b.site_address,b.store_number,b.lat,b.lng]);
+    await c.query('insert into job_sites values($1,$2,$3,$4,$5)',[id,b.site_address,account.rows[0].store_number,b.lat,b.lng]);
     await c.query('insert into notification_outbox(id,job_id) values($1,$2)',[randomUUID(),id]);
    });
    notify();res.status(201).json({id});
