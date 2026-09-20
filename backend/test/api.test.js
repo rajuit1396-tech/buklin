@@ -18,7 +18,7 @@ test('authenticated work flow protects private fields and validates transitions'
  const app=createApp(pool,()=>{},{testing:true});
  const api=request(app);
  const account=async(email)=>{
-   await pool.query("insert into users(id,email,password_hash,store_number) values($1,$2,$3,'007')",[randomUUID(),email,await hashPassword('StrongPassword123')]);
+   await pool.query("insert into users(id,email,password_hash,store_number,site_lat,site_lng,site_address) values($1,$2,$3,'007',24.5,46.7,'Private pinned work site')",[randomUUID(),email,await hashPassword('StrongPassword123')]);
    const r=await api.post('/auth/login').send({email,password:'StrongPassword123'});assert.equal(r.status,200);return r.body;
  };
  try {
@@ -29,7 +29,8 @@ test('authenticated work flow protects private fields and validates transitions'
  // OSM requires a Referer on browser tile requests. Send only the origin
  // cross-site, preserving the admin panel's more restrictive policy.
  assert.equal(mapApp.headers['referrer-policy'],'strict-origin-when-cross-origin');
- assert.equal(adminPage.headers['referrer-policy'],'no-referrer');
+ assert.equal(adminPage.headers['referrer-policy'],'strict-origin-when-cross-origin');
+ assert.match(adminPage.headers['content-security-policy'],/https:\/\/tile.openstreetmap.org/);
  assert.equal((await api.get('/health')).status,200);
  assert.equal((await api.post('/auth/register').send({email:'blocked@example.com',password:'StrongPassword123'})).status,403);
  const customer=await account('customer@example.com');
@@ -62,11 +63,30 @@ test('authenticated work flow protects private fields and validates transitions'
    assert.equal(createdUser.status,201);assert.equal(createdUser.body.user.service,service);
    assert.equal(createdUser.body.user.password,undefined);assert.equal(createdUser.body.user.password_hash,undefined);
  }
- const customerCreated=await post('/admin/users',admin.token,{...newAccount,role:'customer',service:null,store_number:'007',username:'new_customer'});
+ const customerCreated=await post('/admin/users',admin.token,{...newAccount,role:'customer',service:null,store_number:'007',site_lat:24.5,site_lng:46.7,site_address:'Private pinned work site',username:'new_customer'});
  assert.equal(customerCreated.status,201);assert.equal(customerCreated.body.user.service,null);
  const loggedIn=await api.post('/auth/login').send({email:'NEW_CUSTOMER',password:newAccount.password});
  assert.equal(loggedIn.status,200);assert.equal(loggedIn.body.user.role,'customer');
  assert.equal(loggedIn.body.user.store_number,'007');
+ assert.equal(loggedIn.body.user.site_lat,24.5);
+ assert.equal(loggedIn.body.user.site_lng,46.7);
+ assert.equal((await get('/me',loggedIn.body.token)).body.site_address,'Private pinned work site');
+ const customerInput={...newAccount,role:'customer',service:null,store_number:'007',site_lat:24.5,site_lng:46.7,site_address:'Private pinned work site',username:'invalid_location'};
+ for(const invalid of [{site_lat:undefined},{site_lng:undefined},{site_address:undefined},{site_lat:91},{site_lng:-181},{site_lat:null},{site_address:''}]) {
+   assert.equal((await post('/admin/users',admin.token,{...customerInput,...invalid})).status,400);
+ }
+ for(const invalid of [{lat:25},{lng:47},{site_address:'Different location'}]) {
+   assert.equal((await post('/jobs',customer.token,{...body,...invalid})).status,400);
+ }
+ await pool.query('update users set site_lat=null,site_lng=null,site_address=null where id=$1',[stranger.user.id]);
+ assert.equal((await post('/jobs',stranger.token,body)).status,403);
+ const assignLocationPath=`/admin/users/${stranger.user.id}/location`;
+ const fixedLocation={site_lat:24.5,site_lng:46.7,site_address:'Private pinned work site'};
+ assert.equal((await post(assignLocationPath,customer.token,fixedLocation)).status,403);
+ assert.equal((await post(assignLocationPath,admin.token,{...fixedLocation,site_lat:91})).status,400);
+ assert.equal((await post(assignLocationPath,admin.token,fixedLocation)).status,200);
+ assert.equal((await post(assignLocationPath,admin.token,{...fixedLocation,site_lat:25})).status,409);
+ assert.equal((await get('/jobs',stranger.token)).body.site_lat,24.5);
  assert.equal((await get('/me',loggedIn.body.token)).body.store_number,'007');
  for(const store_number of [undefined,null,'','12','abc']) {
    assert.equal((await post('/admin/users',admin.token,{...newAccount,role:'customer',service:null,store_number,username:'invalid_store'})).status,400);
@@ -95,9 +115,13 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal(customerPaymentRequired.status,403);assert.match(customerPaymentRequired.body.error,/Payment required/);
  assert.equal((await get('/jobs',customer.token)).body.payment_required,true);
  assert.equal((await post(customerDebtPath,admin.token,{id:randomUUID(),amount:20,reason:'Payment received',kind:'payment'})).status,200);
- const {store_number: ignoredStore,...fixedStoreRequest}=body;
+ const {store_number: ignoredStore,lat: ignoredLat,lng: ignoredLng,site_address: ignoredAddress,...fixedStoreRequest}=body;
  const created=await post('/jobs',customer.token,fixedStoreRequest);assert.equal(created.status,201);
  const id=created.body.id;
+ const storedSite=await pool.query('select * from job_sites where job_id=$1',[id]);
+ assert.equal(storedSite.rows[0].lat,24.5);
+ assert.equal(storedSite.rows[0].lng,46.7);
+ assert.equal(storedSite.rows[0].address,'Private pinned work site');
  assert.equal((await post('/jobs',customer.token,body)).status,409);
  const operatorDebtPath=`/admin/users/${operator.user.id}/balance`;
  assert.equal((await post(operatorDebtPath,admin.token,{id:randomUUID(),amount:-20,reason:'Unpaid fees'})).status,200);
@@ -235,9 +259,10 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal((await api.delete(`/admin/users/${customerCreated.body.user.id}`).auth(stranger.token,{type:'bearer'})).status,403);
  assert.equal((await api.delete(`/admin/users/${customerCreated.body.user.id}`).auth(admin.token,{type:'bearer'})).status,200);
  assert.equal((await get('/me',loggedIn.body.token)).status,401);
- const archived=(await get('/admin/users',admin.token)).body.users.find(u=>u.id===customerCreated.body.user.id);
- assert.ok(archived.deleted_at);assert.equal((await get(`/admin/users/${archived.id}/jobs`,admin.token)).status,200);
- assert.equal((await post('/admin/users',admin.token,{...newAccount,role:'customer',service:null,store_number:'007',username:'new_customer'})).status,201);
+ assert.ok(!(await get('/admin/users',admin.token)).body.users.some(u=>u.id===customerCreated.body.user.id));
+ assert.equal((await pool.query('select id from users where id=$1',[customerCreated.body.user.id])).rowCount,0);
+ assert.equal((await get(`/admin/users/${customerCreated.body.user.id}/jobs`,admin.token)).status,404);
+ assert.equal((await post('/admin/users',admin.token,{...newAccount,role:'customer',service:null,store_number:'007',site_lat:24.5,site_lng:46.7,site_address:'Private pinned work site',username:'new_customer'})).status,201);
  const dashboard=(await get('/admin/dashboard',admin.token)).body;
  assert.equal(Number(dashboard.totals.received),47);
  assert.equal(Number(dashboard.totals.fees),20);
@@ -263,5 +288,25 @@ test('authenticated work flow protects private fields and validates transitions'
  const before=await pool.query('select request_number,closed_at from jobs where id=$1',[finalJob]);
  await db.exec(await readFile(new URL('../schema.sql',import.meta.url),'utf8'));
  assert.deepEqual((await pool.query('select request_number,closed_at from jobs where id=$1',[finalJob])).rows,before.rows);
+ // Permanent deletion cancels live work, removes the user, and preserves the other participant's history and balance.
+ const deletionJob=await post('/jobs',reinstalledCustomer.body.token,body);
+ assert.equal(deletionJob.status,201);
+ assert.equal((await api.put('/availability').auth(winner.token,{type:'bearer'}).send({available:true})).status,200);
+ assert.equal((await post(`/jobs/${deletionJob.body.id}/action`,winner.token,{action:'accept'})).status,200);
+ assert.equal((await api.delete(`/admin/users/${admin.user.id}`).auth(admin.token,{type:'bearer'})).status,404);
+ assert.equal((await api.delete(`/admin/users/${customer.user.id}`).auth(admin.token,{type:'bearer'})).status,200);
+ assert.equal((await pool.query('select id from users where id=$1',[customer.user.id])).rowCount,0);
+ assert.equal((await get('/me',reinstalledCustomer.body.token)).status,401);
+ const remainingWork=(await get('/jobs',winner.token)).body;
+ assert.equal(remainingWork.balance,25);
+ assert.ok(remainingWork.jobs.some(j=>j.id===deletionJob.body.id&&j.status==='cancelled'&&j.customer_id===null));
+ assert.ok(remainingWork.jobs.some(j=>j.id===id&&j.status==='completed'));
+ assert.equal((await pool.query('select * from job_start_codes where job_id=$1',[deletionJob.body.id])).rowCount,0);
+ assert.equal((await pool.query('select * from notification_outbox where job_id=$1',[deletionJob.body.id])).rowCount,0);
+ const strangerBalance=(await get('/jobs',stranger.token)).body.balance;
+ assert.equal((await api.delete(`/admin/users/${winner.user.id}`).auth(admin.token,{type:'bearer'})).status,200);
+ assert.equal((await pool.query('select id from users where id=$1',[winner.user.id])).rowCount,0);
+ assert.equal((await get('/jobs',stranger.token)).body.balance,strangerBalance);
+ assert.equal((await pool.query('select operator_id from jobs where id=$1',[finalJob])).rows[0].operator_id,null);
  }finally{await db.close();}
 });

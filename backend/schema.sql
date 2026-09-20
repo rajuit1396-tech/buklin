@@ -6,6 +6,9 @@ create table if not exists users (
  online boolean not null default false,
  check(role <> 'operator' or service is not null)
 );
+alter table users add column if not exists site_lat double precision check(site_lat between -90 and 90);
+alter table users add column if not exists site_lng double precision check(site_lng between -180 and 180);
+alter table users add column if not exists site_address text check(length(site_address) between 5 and 300);
 create table if not exists sessions (
  token_hash text primary key, user_id uuid not null references users(id), expires_at timestamptz not null
 );
@@ -23,6 +26,8 @@ create table if not exists jobs (
  created_at timestamptz not null default now(), check(operator_id is null or operator_id <> customer_id)
 );
 create unique index if not exists one_customer_job on jobs(customer_id) where status in ('requested','accepted','on_the_way','working');
+-- Keep the other participant's work history when an account is permanently removed.
+alter table jobs alter column customer_id drop not null;
 create unique index if not exists one_operator_job on jobs(operator_id) where status in ('accepted','on_the_way','working');
 create table if not exists job_sites (
  job_id uuid primary key references jobs(id), address text not null,

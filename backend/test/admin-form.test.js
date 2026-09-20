@@ -17,6 +17,7 @@ function setup({createFails=false,refreshFails=false}={}) {
   const context={document:{getElementById:element,createElement:()=>({append(){}})},
     sessionStorage:{getItem:()=>null,removeItem(){},setItem(){}},
     setTimeout:()=>0,clearTimeout(){},
+    openLocationPicker:(_initial,save)=>save({site_lat:24.5,site_lng:46.7,site_address:'Private pinned work site'}),
     FormData:class {constructor(form){assert.ok(form);}get(key){return values[key];}},
     fetch:async path=>{
       if(path==='/admin/users') return {ok:!createFails,status:createFails?409:201,
@@ -25,6 +26,7 @@ function setup({createFails=false,refreshFails=false}={}) {
         json:async()=>refreshFails?{error:'Refresh failed'}:path==='/admin/dashboard'?{totals:{}}:{users:[]}};
     }};
   vm.runInNewContext(source,context);
+  element('chooseLocationButton').handlers.click();
   return {element,async submit(){
     const form=element('accountForm'),button={disabled:false,textContent:'Create account'};
     const event={currentTarget:form,submitter:button,preventDefault(){}};

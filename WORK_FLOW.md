@@ -7,8 +7,10 @@ The old supabase/ files are inactive historical artifacts.
 2. Choose Dyna, Trailer, or Inside store. Custom names are not allowed.
    A three-digit whole amount from 100 to 999 Riyal is required.
 3. The admin assigns a fixed three-digit store number when creating the customer
-   account (007 is valid). Customers cannot edit it. Drag the map
-   to set the work pin, or use current GPS. Both store number and pin are required.
+   account (007 is valid), and selects the exact customer location on the admin map
+   or using GPS. Customers see these fixed account details and cannot edit them.
+   Every request uses the saved account location. Existing customers need a one-time
+   location assignment in the admin panel before requesting new work.
 4. Search for an operator. Waiting requests may be cancelled by the customer.
 5. Available operators see equipment, loading type and offer amount. Exact location
    and store number stay hidden until acceptance. Only one operator can accept.

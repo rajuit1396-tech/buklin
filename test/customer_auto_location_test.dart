@@ -32,7 +32,7 @@ class CustomerGps extends GeolocatorPlatform {
 }
 
 void main() {
-  testWidgets('search automatically captures customer GPS location',
+  testWidgets('search uses the fixed account location without requesting GPS',
       (tester) async {
     final original = GeolocatorPlatform.instance;
     final gps = CustomerGps();
@@ -67,8 +67,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(gps.requests, 1);
+    expect(gps.requests, 0);
+    expect(find.text('Use my exact location'), findsNothing);
     expect(find.text('Your work order'), findsOneWidget);
-    expect(find.textContaining('Pinned work site: 24.5, 46.7'), findsOneWidget);
+    expect(find.textContaining('Pinned work site: 24.5, 46.7'), findsWidgets);
   });
 }

@@ -6,14 +6,14 @@ import {z} from 'zod';
 import {randomBytes,randomUUID,randomInt} from 'node:crypto';
 import {hasArrived} from './arrival.js';
 import {authenticate,hashPassword,checkPassword,tokenHash} from './auth.js';
-import {adminAccount} from './account-validation.js';
+import {adminAccount,accountLocation} from './account-validation.js';
 import {fileURLToPath} from 'node:url';
 const publicDirectory=fileURLToPath(new URL('../public/',import.meta.url));
 const point = z.object({lat:z.number().min(-90).max(90),lng:z.number().min(-180).max(180)});
-const requestSchema = point.extend({equipment:z.enum(['5-finger excavator grapple','Pickup van','Big truck']),
+const requestSchema = point.partial().extend({equipment:z.enum(['5-finger excavator grapple','Pickup van','Big truck']),
  loading:z.enum(['Dyna','Trailer','Inside store']),store_number:z.string().regex(/^[0-9]{3}$/).optional(),
  offered_amount:z.string().regex(/^(?:[3-9][0-9]|[1-9][0-9]{2})$/),
- site_address:z.string().min(5).max(300),work_details:z.string().min(10).max(1000)});
+ site_address:z.string().min(5).max(300).optional(),work_details:z.string().min(10).max(1000)});
 const fail = (status,message) => { throw Object.assign(new Error(message),{status}); };
 export async function transaction(pool, task) {
  const client=await pool.connect();
@@ -35,7 +35,11 @@ export function createApp(pool, notify=()=>{}, options={}) {
  }}}),express.static(fileURLToPath(new URL('../public/app/',import.meta.url)),{
    maxAge:0,setHeaders:res=>res.setHeader('Cache-Control','no-cache')
  }),(_req,res)=>res.sendStatus(404));
- app.use(helmet());
+ app.use((req,res,next)=>{
+   if(req.path==='/' || req.path==='/admin.html') return helmet({referrerPolicy:{policy:'strict-origin-when-cross-origin'},
+     contentSecurityPolicy:{directives:{imgSrc:["'self'",'data:','https://tile.openstreetmap.org']}}})(req,res,next);
+   helmet()(req,res,next);
+ });
  const origins=(process.env.CORS_ORIGINS ?? 'http://localhost:8082').split(',');
  app.use(cors({origin:(origin,done)=>done(null,!origin || origins.includes(origin))}));
  app.use(express.json({limit:'16kb'}));
@@ -48,7 +52,7 @@ export function createApp(pool, notify=()=>{}, options={}) {
    const token=randomBytes(32).toString('hex');
    await pool.query("insert into sessions values($1,$2,now()+interval '7 days')",[tokenHash(token),user.id]);
    res.json({token,user:{id:user.id,email:user.email,name:user.name,phone:user.phone,username:user.username,
-     role:user.role,service:user.service,store_number:user.store_number,online:user.online}});
+     role:user.role,service:user.service,store_number:user.store_number,site_lat:user.site_lat,site_lng:user.site_lng,site_address:user.site_address,online:user.online}});
  }
  app.post('/auth/register',authLimit,async(req,res)=>{
    fail(403,'Self-registration is disabled. Contact the admin to create your account.');
@@ -76,10 +80,10 @@ export function createApp(pool, notify=()=>{}, options={}) {
  app.get('/admin/users',async(req,res)=>{
    const search=z.string().max(100).parse(req.query.search ?? '');
    const offset=z.coerce.number().int().min(0).max(10000000).parse(req.query.offset ?? 0);
-   const {rows}=await pool.query(`select id,name,phone,username,email,role,service,store_number,online,blocked_until,deleted_at,
+   const {rows}=await pool.query(`select id,name,phone,username,email,role,service,store_number,site_lat,site_lng,site_address,online,blocked_until,deleted_at,
      (coalesce((select sum(amount) from work_charges where user_id=users.id),0)+
       coalesce((select sum(amount) from balance_adjustments where user_id=users.id),0))::integer as balance from users
-     where role in ('customer','operator') and
+     where role in ('customer','operator') and deleted_at is null and
      (coalesce(name,'') ilike $1 or coalesce(username,'') ilike $1 or coalesce(phone,'') ilike $1 or coalesce(email,'') ilike $1)
      order by (deleted_at is not null),coalesce(name,username,email),id limit 101 offset $2`,['%'+search+'%',offset]);
    res.json({users:rows.slice(0,100),has_more:rows.length>100});
@@ -165,7 +169,7 @@ export function createApp(pool, notify=()=>{}, options={}) {
  app.delete('/admin/users/:id',async(req,res)=>{
    const id=z.uuid().parse(req.params.id);
    await transaction(pool,async c=>{
-     const account=await c.query("select id from users where id=$1 and role in ('customer','operator') and deleted_at is null for update",[id]);
+     const account=await c.query("select id from users where id=$1 and role in ('customer','operator') for update",[id]);
      if(!account.rowCount) fail(404,'Account unavailable');
      await c.query(`update jobs set status='cancelled' where (customer_id=$1 or operator_id=$1)
        and status in ('requested','accepted','on_the_way','working')`,[id]);
@@ -174,18 +178,31 @@ export function createApp(pool, notify=()=>{}, options={}) {
      await c.query(`delete from notification_outbox where job_id in
        (select id from jobs where (customer_id=$1 or operator_id=$1) and status='cancelled')`,[id]);
      await c.query('delete from sessions where user_id=$1',[id]);
-     await c.query(`update users set deleted_at=now(),online=false,email=null,phone=null,username=null,
-       blocked_until=null where id=$1`,[id]);
+     await c.query('delete from declines where operator_id=$1',[id]);
+     await c.query('delete from work_charges where user_id=$1',[id]);
+     await c.query('delete from balance_adjustments where user_id=$1',[id]);
+     await c.query('update activity_log set user_id=null where user_id=$1',[id]);
+     await c.query('update jobs set customer_id=null where customer_id=$1',[id]);
+     await c.query('update jobs set operator_id=null where operator_id=$1',[id]);
+     await c.query('delete from users where id=$1',[id]);
    });
    notify();res.json({ok:true});
  });
  app.post('/admin/users',async(req,res)=>{
    const body=adminAccount.parse(req.body);
    const hash=await hashPassword(body.password);
-   const {rows}=await pool.query(`insert into users(id,name,phone,username,password_hash,role,service,store_number)
-     values($1,$2,$3,$4,$5,$6,$7,$8) returning id,name,phone,username,role,service,store_number`,
-     [randomUUID(),body.name,body.phone,body.username,hash,body.role,body.role==='operator'?body.service:null,body.role==='customer'?body.store_number:null]);
+   const {rows}=await pool.query(`insert into users(id,name,phone,username,password_hash,role,service,store_number,site_lat,site_lng,site_address)
+     values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning id,name,phone,username,role,service,store_number,site_lat,site_lng,site_address`,
+     [randomUUID(),body.name,body.phone,body.username,hash,body.role,body.role==='operator'?body.service:null,body.role==='customer'?body.store_number:null,body.role==='customer'?body.site_lat:null,body.role==='customer'?body.site_lng:null,body.role==='customer'?body.site_address:null]);
    res.status(201).json({user:rows[0]});
+ });
+ app.post('/admin/users/:id/location',async(req,res)=>{
+   const id=z.uuid().parse(req.params.id),location=accountLocation.parse(req.body);
+   const {rows}=await pool.query(`update users set site_lat=$2,site_lng=$3,site_address=$4
+     where id=$1 and role='customer' and deleted_at is null and site_lat is null and site_lng is null
+     returning id,site_lat,site_lng,site_address`,[id,location.site_lat,location.site_lng,location.site_address]);
+   if(!rows.length) fail(409,'Location is already fixed or the customer account is unavailable.');
+   notify();res.json({user:rows[0]});
  });
  app.post('/admin/users/:id/store-number',async(req,res)=>{
    const id=z.uuid().parse(req.params.id);
@@ -227,7 +244,7 @@ export function createApp(pool, notify=()=>{}, options={}) {
     customer.phone as private_customer_phone,s.lat as private_site_lat,s.lng as private_site_lng,
     loc.lat as private_operator_lat,loc.lng as private_operator_lng,loc.updated_at as private_location_updated
     from jobs j join job_sites s on s.job_id=j.id
-    join users customer on customer.id=j.customer_id
+    left join users customer on customer.id=j.customer_id
     left join job_start_codes codes on codes.job_id=j.id
     left join job_locations loc on loc.job_id=j.id
     where (j.status not in ('completed','cancelled') or j.closed_at>now()-interval '3 days')
@@ -244,23 +261,27 @@ export function createApp(pool, notify=()=>{}, options={}) {
          {lat:private_operator_lat,lng:private_operator_lng,updated_at:private_location_updated});
      return {...job,customer_phone:arrived?private_customer_phone:null};
    });
-   res.json({jobs,store_number:u.store_number,online:u.online,balance,blocked_until:u.blocked_until,payment_required:balance<=-20});
+   res.json({jobs,store_number:u.store_number,site_lat:u.site_lat,site_lng:u.site_lng,site_address:u.site_address,online:u.online,balance,blocked_until:u.blocked_until,payment_required:balance<=-20});
  });
  app.post('/jobs',async(req,res)=>{
    if(req.user.role!=='customer') fail(403,'Customer account required');
    const b=requestSchema.parse(req.body),id=randomUUID();
    await transaction(pool,async c=>{
-    const account=await c.query(`select blocked_until,store_number,
+    const account=await c.query(`select blocked_until,store_number,site_lat,site_lng,site_address,
       coalesce((select sum(amount) from work_charges where user_id=$1),0)+
       coalesce((select sum(amount) from balance_adjustments where user_id=$1),0) as balance
       from users where id=$1 for update`,[req.user.id]);
+    const site=account.rows[0];
+    if(site.site_lat===null || site.site_lng===null || !site.site_address) fail(403,'Contact admin to assign your account location.');
+    if((b.lat!==undefined && b.lat!==site.site_lat) || (b.lng!==undefined && b.lng!==site.site_lng) ||
+      (b.site_address!==undefined && b.site_address!==site.site_address)) fail(400,'Work location is fixed to your account.');
     if(!account.rows[0].store_number) fail(403,'Contact admin to assign your account store number.');
     if(b.store_number !== undefined && b.store_number !== account.rows[0].store_number) fail(400,'Store number is fixed to your account.');
     if(new Date(account.rows[0].blocked_until)>new Date()) fail(403,'New requests are paused until '+new Date(account.rows[0].blocked_until).toISOString());
     if(Number(account.rows[0].balance)<=-20) fail(403,'Payment required. Pay your balance before making a new request.');
     await c.query(`insert into jobs(id,customer_id,service,loading_vehicle,offered_amount,details)
       values($1,$2,$3,$4,$5,$6)`,[id,req.user.id,b.equipment,b.loading,b.offered_amount,b.work_details]);
-    await c.query('insert into job_sites values($1,$2,$3,$4,$5)',[id,b.site_address,account.rows[0].store_number,b.lat,b.lng]);
+    await c.query('insert into job_sites values($1,$2,$3,$4,$5)',[id,site.site_address,site.store_number,site.site_lat,site.site_lng]);
     await c.query('insert into notification_outbox(id,job_id) values($1,$2)',[randomUUID(),id]);
    });
    notify();res.status(201).json({id});

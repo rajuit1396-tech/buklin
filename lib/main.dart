@@ -8,7 +8,6 @@ import 'backend_api.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'work_location.dart';
-import 'site_picker.dart';
 import 'work_alerts.dart';
 import 'login_screen.dart';
 
@@ -28,6 +27,23 @@ bool visibleInHistory(Map<String, dynamic> job) {
   final closed = DateTime.tryParse(job['closed_at']?.toString() ?? '');
   return closed == null ||
       closed.isAfter(DateTime.now().subtract(const Duration(days: 3)));
+}
+
+String? closedCustomerWorkStatus(
+    List<Map<String, dynamic>> previous, List<Map<String, dynamic>> next,
+    {required bool operator, required String customerId}) {
+  if (operator) return null;
+  for (final job in next) {
+    if (job['customer_id'] == customerId &&
+        ['completed', 'cancelled'].contains(job['status']) &&
+        previous.any((old) =>
+            old['id'] == job['id'] &&
+            ['requested', 'accepted', 'on_the_way', 'working']
+                .contains(old['status']))) {
+      return job['status'] as String;
+    }
+  }
+  return null;
 }
 
 String? amountError(String? value) {
@@ -228,6 +244,25 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
   static const loadingVehicles = ['Dyna', 'Trailer', 'Inside store'];
   String get accountStoreNumber =>
       live ? (db.user?['store_number']?.toString() ?? '') : '007';
+  double? get accountLatitude =>
+      live ? (db.user?['site_lat'] as num?)?.toDouble() : 24.5;
+  double? get accountLongitude =>
+      live ? (db.user?['site_lng'] as num?)?.toDouble() : 46.7;
+  String get accountAddress => live
+      ? (db.user?['site_address']?.toString() ?? '')
+      : 'Pinned work site: 24.5, 46.7';
+  bool get hasAccountLocation =>
+      accountLatitude != null &&
+      accountLongitude != null &&
+      accountAddress.isNotEmpty;
+  Widget fixedLocation() => ListTile(
+        leading: const Icon(Icons.location_on_outlined),
+        title: const Text('Fixed work location'),
+        subtitle: Text(hasAccountLocation
+            ? '$accountAddress\n$accountLatitude, $accountLongitude'
+            : 'Contact admin to assign your work location'),
+        trailing: const Icon(Icons.lock_outline),
+      );
   String? loadingVehicle;
   int page = 0;
   final scroll = ScrollController();
@@ -236,7 +271,8 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
     if (scroll.hasClients) scroll.jumpTo(0);
   }
 
-  void returnHomeAfterWork({bool completed = true}) {
+  void returnHomeAfterWork({bool completed = true, bool cancelled = false}) {
+    if (operator) return;
     setState(() {
       page = 0;
       selected = 0;
@@ -250,7 +286,11 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
       ]) {
         controller.clear();
       }
-      message = completed ? 'Work completed.' : null;
+      message = completed
+          ? 'Work completed.'
+          : cancelled
+              ? 'Work cancelled.'
+              : null;
     });
     saveState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -311,15 +351,14 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
       final result = await db.call('GET', '/jobs');
       if (mounted && db.token == session) {
         final updatedJobs = List<Map<String, dynamic>>.from(result['jobs']);
-        final completed = updatedJobs.any((next) =>
-            next['status'] == 'completed' &&
-            jobs.any((previous) =>
-                previous['id'] == next['id'] &&
-                ['accepted', 'on_the_way', 'working']
-                    .contains(previous['status'])));
+        final closedStatus = closedCustomerWorkStatus(jobs, updatedJobs,
+            operator: operator, customerId: userId);
         setState(() {
           if (operator) online = result['online'] == true;
           db.user?['store_number'] = result['store_number'];
+          for (final field in ['site_lat', 'site_lng', 'site_address']) {
+            db.user?[field] = result[field];
+          }
           jobs = updatedJobs;
           balance = (result['balance'] as num?)?.toInt() ?? 0;
           blockedUntil =
@@ -398,7 +437,11 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
             });
           }
         }
-        if (completed) returnHomeAfterWork();
+        if (closedStatus != null) {
+          returnHomeAfterWork(
+              completed: closedStatus == 'completed',
+              cancelled: closedStatus == 'cancelled');
+        }
       }
     } on ApiException catch (e) {
       if (mounted && e.statusCode == 401 && db.token == session) {
@@ -455,18 +498,12 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
       goToPage(1);
       return;
     }
-    if (coordinateError(latitude.text, 90) != null ||
-        coordinateError(longitude.text, 180) != null) {
-      try {
-        final position = await currentPosition();
-        latitude.text = position.latitude.toString();
-        longitude.text = position.longitude.toString();
-        if (mounted) setState(() {});
-      } catch (error) {
-        throw ApiException(error.toString().replaceFirst('Exception: ', ''));
-      }
+    if (!hasAccountLocation) {
+      throw const ApiException('Contact admin to assign your work location.');
     }
-    address.text = 'Pinned work site: ${latitude.text}, ${longitude.text}';
+    latitude.text = accountLatitude.toString();
+    longitude.text = accountLongitude.toString();
+    address.text = accountAddress;
     details.text =
         '${services[selected]} with loading vehicle: $loadingVehicle';
     final row = <String, dynamic>{
@@ -486,10 +523,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
         'loading': loadingVehicle,
         'store_number': accountStoreNumber,
         'offered_amount': offeredAmount.text.trim(),
-        'site_address': address.text.trim(),
-        'work_details': details.text.trim(),
-        'lat': double.parse(latitude.text),
-        'lng': double.parse(longitude.text)
+        'work_details': details.text.trim()
       });
       await refresh();
     } else {
@@ -588,7 +622,10 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
           job['closed_at'] = DateTime.now().toUtc().toIso8601String();
         }
       });
-      if (action == 'complete') returnHomeAfterWork();
+    }
+    if (!operator && (action == 'complete' || action == 'cancel')) {
+      returnHomeAfterWork(
+          completed: action == 'complete', cancelled: action == 'cancel');
     }
   }
 
@@ -728,6 +765,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                                     ? 'Contact admin to assign your store number'
                                     : 'Assigned by admin'),
                                 trailing: const Icon(Icons.lock_outline)),
+                          if (!operator) fixedLocation(),
                           if (busy) const LinearProgressIndicator(),
                           if (message != null)
                             Padding(
@@ -941,20 +979,13 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                         : 'Contact admin to assign your store number',
               )),
           const SizedBox(height: 12),
-          SitePicker(
-            initialLatitude: double.tryParse(latitude.text),
-            initialLongitude: double.tryParse(longitude.text),
-            onChanged: (point) {
-              latitude.text = point.latitude.toString();
-              longitude.text = point.longitude.toString();
-            },
-          ),
+          fixedLocation(),
           const SizedBox(height: 16),
           button('Search for an operator', request),
           const Padding(
               padding: EdgeInsets.only(top: 8),
               child: Text(
-                  'Your exact phone GPS location is captured automatically when you search.')),
+                  'Your fixed work location assigned by admin is used for every request.')),
         ],
       ];
   List<Widget> operatorView(List<Map<String, dynamic>> active) {

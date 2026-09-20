@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Buklin Admin</title>
   <link rel="stylesheet" href="/admin.css">
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
 </head>
 <body>
   <header class="topbar">
@@ -41,6 +42,10 @@
             <button id="showPasswordButton" class="ghost" type="button" aria-controls="accountPassword" aria-pressed="false">Show password</button>
             <label>Account type<select name="role" id="roleSelect"><option value="customer">Customer</option><option value="operator">Operator</option></select></label>
             <label id="storeField">Store number<input id="storeNumber" name="store_number" inputmode="numeric" pattern="[0-9]{3}" minlength="3" maxlength="3" placeholder="007" required></label>
+            <div id="locationField">
+              <button id="chooseLocationButton" class="ghost" type="button">Choose customer location</button>
+              <p id="locationSummary">No location selected. Required for customers.</p>
+            </div>
             <label id="serviceField" hidden>Operator machine<select id="serviceSelect" name="service" disabled><option value="5-finger excavator grapple">5-finger excavator grapple</option><option value="Pickup van">Pickup van</option><option value="Big truck">Big truck</option></select></label>
             <button type="submit">Create account</button>
             <p id="accountResult" class="account-result" role="status" aria-live="polite" aria-atomic="true" hidden></p>
@@ -56,6 +61,22 @@
     </section>
     <p id="message" class="message" role="status" aria-live="polite"></p>
   </main>
+  <dialog id="locationDialog">
+    <form id="locationForm">
+      <h2>Choose exact customer location</h2>
+      <p>Tap the map to place the pin. This location will be fixed on the customer account.</p>
+      <div id="locationMap" aria-label="Customer location map"></div>
+      <button id="locateButton" class="ghost" type="button">Use my exact location</button>
+      <label>Latitude<input id="locationLat" type="number" min="-90" max="90" step="any" required></label>
+      <label>Longitude<input id="locationLng" type="number" min="-180" max="180" step="any" required></label>
+      <label>Address or location description<input id="locationAddress" minlength="5" maxlength="300" required></label>
+      <p id="locationError" role="status" aria-live="polite"></p>
+      <button id="saveLocationButton" type="submit">Use this location</button>
+      <button id="cancelLocationButton" class="ghost" type="button">Cancel</button>
+    </form>
+  </dialog>
+  <script src="/vendor/leaflet/leaflet.js" defer></script>
+  <script src="/admin-location.js" defer></script>
   <script src="/admin.js" defer></script>
 </body>
 </html>
