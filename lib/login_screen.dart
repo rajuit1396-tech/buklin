@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_language.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen(
@@ -25,7 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool hidePassword = true;
 
   InputDecoration field(String label, IconData icon) => InputDecoration(
-      labelText: label,
+      labelText: tr(context, label),
       prefixIcon: Icon(icon, size: 21, color: const Color(0xFF78828A)),
       filled: true,
       fillColor: Colors.white,
@@ -55,12 +56,17 @@ class _LoginScreenState extends State<LoginScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 24, vertical: 28),
                             children: [
+                              const Align(
+                                  alignment: AlignmentDirectional.centerEnd,
+                                  child: IconTheme(
+                                      data: IconThemeData(color: Colors.white),
+                                      child: LanguageSelector())),
                               Image.asset('assets/buklin-logo.png',
                                   height: 176,
                                   fit: BoxFit.contain,
                                   semanticLabel: 'Buklin'),
                               const SizedBox(height: 20),
-                              const Text('HEAVY WORK. MADE EASY.',
+                              const AppText('HEAVY WORK. MADE EASY.',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                       color: Color(0xFFFFA34D),
@@ -84,14 +90,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                           crossAxisAlignment:
                                               CrossAxisAlignment.stretch,
                                           children: [
-                                        const Text('Welcome back',
+                                        const AppText('Welcome back',
                                             style: TextStyle(
                                                 fontSize: 28,
                                                 fontWeight: FontWeight.w800,
                                                 letterSpacing: -0.8,
                                                 color: Color(0xFF1B242C))),
                                         const SizedBox(height: 6),
-                                        const Text(
+                                        const AppText(
                                             'Sign in and get your next job moving.',
                                             style: TextStyle(
                                                 color: Color(0xFF66717B),
@@ -150,7 +156,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                                                     size: 22),
                                                                 const SizedBox(
                                                                     height: 5),
-                                                                Text(
+                                                                AppText(
                                                                     role == 'customer'
                                                                         ? 'Customer'
                                                                         : 'Operator',
@@ -160,7 +166,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                                               ])))));
                                             }).toList())),
                                         const SizedBox(height: 24),
-                                        Text(
+                                        AppText(
                                             '${widget.role == 'operator' ? 'Operator' : 'Customer'} login',
                                             style: const TextStyle(
                                                 fontWeight: FontWeight.w700,
@@ -187,8 +193,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                             autofillHints: const [
                                               AutofillHints.password
                                             ],
-                                            textInputAction: TextInputAction
-                                                .done,
+                                            textInputAction:
+                                                TextInputAction.done,
                                             onSubmitted: (_) {
                                               if (!widget.busy)
                                                 widget.onSubmit();
@@ -197,9 +203,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                                     Icons.lock_outline_rounded)
                                                 .copyWith(
                                                     suffixIcon: IconButton(
-                                                        tooltip: hidePassword
-                                                            ? 'Show password'
-                                                            : 'Hide password',
+                                                        tooltip: tr(
+                                                            context,
+                                                            hidePassword
+                                                                ? 'Show password'
+                                                                : 'Hide password'),
                                                         onPressed: () => setState(
                                                             () => hidePassword =
                                                                 !hidePassword),
@@ -214,7 +222,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                                   top: 16),
                                               child: Semantics(
                                                   liveRegion: true,
-                                                  child: Text(widget.message!,
+                                                  child: AppText(
+                                                      widget.message!,
                                                       style: const TextStyle(
                                                           color:
                                                               Color(0xFFAD3B18),
@@ -247,7 +256,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                                         MainAxisAlignment
                                                             .center,
                                                     children: [
-                                                        Text('Sign in',
+                                                        AppText('Sign in',
                                                             style: TextStyle(
                                                                 fontSize: 16,
                                                                 fontWeight:
@@ -260,7 +269,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                                             size: 20)
                                                       ])),
                                         const SizedBox(height: 22),
-                                        const Text(
+                                        const AppText(
                                             'Need an account? Contact your administrator.',
                                             textAlign: TextAlign.center,
                                             style: TextStyle(
@@ -269,7 +278,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                                 color: Color(0xFF66717B))),
                                       ]))),
                               const SizedBox(height: 24),
-                              const Text('EQUIPMENT  /  TRANSPORT  /  WORK',
+                              const AppText('EQUIPMENT  /  TRANSPORT  /  WORK',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                       color: Color(0xFFADB5BC),

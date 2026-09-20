@@ -41,6 +41,10 @@ test('authenticated work flow protects private fields and validates transitions'
  await pool.query("update users set role='admin' where id=$1",[admin.user.id]);
  await pool.query("update users set phone='+966501112233' where id=$1",[customer.user.id]);
  await pool.query("update users set role='operator',service='Pickup van',online=true where id in ($1,$2)",[operator.user.id,other.user.id]);
+ // Availability belongs to the operator, independently of a login session.
+ const operatorSession=await api.post('/auth/login').send({email:'operator@example.com',password:'StrongPassword123',expected_role:'operator'});
+ assert.equal((await api.post('/auth/logout').auth(operatorSession.body.token,{type:'bearer'}).send({})).status,200);
+ assert.equal((await api.get('/jobs').auth(operator.token,{type:'bearer'})).body.online,true);
  assert.equal((await api.post('/auth/login').send({email:'customer@example.com',password:'StrongPassword123',expected_role:'customer'})).status,200);
  assert.equal((await api.post('/auth/login').send({email:'customer@example.com',password:'StrongPassword123',expected_role:'operator'})).status,401);
  assert.equal((await api.post('/auth/login').send({email:'operator@example.com',password:'StrongPassword123',expected_role:'operator'})).status,200);
@@ -178,6 +182,12 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal((await post(`/jobs/${id}/action`,winner.token,{action:'complete'})).status,409);
  await api.put(`/jobs/${id}/location`).auth(winner.token,{type:'bearer'}).send({lat:body.lat,lng:body.lng});
  assert.equal((await post(`/jobs/${id}/action`,winner.token,{action:'complete'})).status,200);
+ assert.equal((await get('/jobs',winner.token)).body.online,true);
+ // An explicit switch-off persists across refreshes and prevents acceptance.
+ assert.equal((await api.put('/availability').auth(winner.token,{type:'bearer'}).send({available:false})).status,200);
+ assert.equal((await get('/jobs',winner.token)).body.online,false);
+ assert.equal((await post(`/jobs/${nextJob.body.id}/action`,winner.token,{action:'accept'})).status,409);
+ assert.equal((await api.put('/availability').auth(winner.token,{type:'bearer'}).send({available:true})).status,200);
  assert.equal((await get('/jobs',winner.token)).body.jobs.find(job=>job.id===id).customer_phone,null);
  assert.equal((await get('/jobs',customer.token)).body.balance,-4);
  assert.equal((await get('/jobs',winner.token)).body.balance,-4);
@@ -201,6 +211,9 @@ test('authenticated work flow protects private fields and validates transitions'
  assert.equal((await post(`/jobs/${another.body.id}/action`,winner.token,{action:'travel'})).status,200);
  assert.equal((await post(`/jobs/${another.body.id}/action`,winner.token,{action:'cancel'})).status,200);
  const blockedOperator=(await get('/jobs',winner.token)).body;
+ assert.equal(blockedOperator.online,true);
+ assert.equal((await api.put('/availability').auth(winner.token,{type:'bearer'}).send({available:false})).status,200);
+ assert.equal((await get('/jobs',winner.token)).body.online,false);
  assert.ok(new Date(blockedOperator.blocked_until)-Date.now()>4.9*3600000);
  assert.equal(blockedOperator.balance,-6);
  assert.equal((await api.put('/availability').auth(winner.token,{type:'bearer'}).send({available:true})).status,403);

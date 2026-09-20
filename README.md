@@ -14,6 +14,12 @@ C:\flutter\bin\flutter.bat run -d chrome --web-port 8082
 
 Without BACKEND_URL the app runs the labeled, in-memory customer/operator demo.
 
+Use the language icon on the sign-in or work screen to choose English,
+Bengali (বাংলা), Urdu (اردو), or Hindi (हिन्दी). The app remembers this choice
+on the device. Urdu uses a right-to-left layout. Changing language preserves
+current work and form entries; addresses and customer-entered details retain
+their original text. App translations are maintained in `lib/translations.dart`.
+
 ## Run with Neon
 
 1. Install Node.js LTS (22 or newer).

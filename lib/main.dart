@@ -10,6 +10,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'work_location.dart';
 import 'work_alerts.dart';
 import 'login_screen.dart';
+import 'app_language.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 const services = ['5-finger excavator grapple', 'Pickup van', 'Big truck'];
 const serviceImages = [
@@ -103,7 +105,7 @@ class _OperatorOtpDialogState extends State<OperatorOtpDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-          title: const Text('Enter customer OTP'),
+          title: const AppText('Enter customer OTP'),
           content: Form(
               key: form,
               child: TextFormField(
@@ -117,20 +119,22 @@ class _OperatorOtpDialogState extends State<OperatorOtpDialog> {
                     LengthLimitingTextInputFormatter(4)
                   ],
                   decoration: InputDecoration(
-                      labelText: '4-digit OTP',
-                      helperText: 'Ask the customer after arriving at the site',
-                      errorText: error),
+                      labelText: tr(context, '4-digit OTP'),
+                      helperText: tr(context,
+                          'Ask the customer after arriving at the site'),
+                      errorText: error == null ? null : tr(context, error!)),
                   validator: (s) => RegExp(r'^[0-9]{4}$').hasMatch(s ?? '')
                       ? null
-                      : 'Enter all 4 digits',
+                      : tr(context, 'Enter all 4 digits'),
                   onFieldSubmitted: (_) => verify())),
           actions: [
             TextButton(
                 onPressed: submitting ? null : () => Navigator.pop(context),
-                child: const Text('Cancel')),
+                child: const AppText('Cancel')),
             FilledButton(
                 onPressed: submitting ? null : verify,
-                child: Text(submitting ? 'Verifying...' : 'Verify and start'))
+                child:
+                    AppText(submitting ? 'Verifying...' : 'Verify and start'))
           ]);
 }
 
@@ -138,23 +142,52 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final preferences = await SharedPreferences.getInstance();
   if (live) await BackendApi.instance.restoreSession();
-  runApp(MaterialApp(
-      title: 'Buklin',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFEA640D)),
-          scaffoldBackgroundColor: const Color(0xFFF7F5F1),
-          inputDecorationTheme: const InputDecorationTheme(
-              border: OutlineInputBorder(),
-              filled: true,
-              fillColor: Colors.white),
-          filledButtonTheme: FilledButtonThemeData(
-              style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF24282B),
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(48, 52)))),
-      home: WorkApp(preferences: preferences)));
+  runApp(BuklinApp(preferences: preferences));
+}
+
+class BuklinApp extends StatefulWidget {
+  const BuklinApp({super.key, required this.preferences});
+  final SharedPreferences preferences;
+
+  @override
+  State<BuklinApp> createState() => _BuklinAppState();
+}
+
+class _BuklinAppState extends State<BuklinApp> {
+  late final language = LanguageController(widget.preferences);
+
+  @override
+  void dispose() {
+    language.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AppLanguage(
+      controller: language,
+      child: ListenableBuilder(
+          listenable: language,
+          builder: (context, _) => MaterialApp(
+              title: 'Buklin',
+              locale: Locale(language.code),
+              supportedLocales: languageNames.keys.map((code) => Locale(code)),
+              localizationsDelegates: GlobalMaterialLocalizations.delegates,
+              debugShowCheckedModeBanner: false,
+              theme: ThemeData(
+                  useMaterial3: true,
+                  colorScheme:
+                      ColorScheme.fromSeed(seedColor: const Color(0xFFEA640D)),
+                  scaffoldBackgroundColor: const Color(0xFFF7F5F1),
+                  inputDecorationTheme: const InputDecorationTheme(
+                      border: OutlineInputBorder(),
+                      filled: true,
+                      fillColor: Colors.white),
+                  filledButtonTheme: FilledButtonThemeData(
+                      style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF24282B),
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(48, 52)))),
+              home: WorkApp(preferences: widget.preferences))));
 }
 
 class WorkApp extends StatefulWidget {
@@ -257,10 +290,10 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
       accountAddress.isNotEmpty;
   Widget fixedLocation() => ListTile(
         leading: const Icon(Icons.location_on_outlined),
-        title: const Text('Fixed work location'),
-        subtitle: Text(hasAccountLocation
-            ? '$accountAddress\n$accountLatitude, $accountLongitude'
-            : 'Contact admin to assign your work location'),
+        title: const AppText('Fixed work location'),
+        subtitle: hasAccountLocation
+            ? Text('$accountAddress\n$accountLatitude, $accountLongitude')
+            : const AppText('Contact admin to assign your work location'),
         trailing: const Icon(Icons.lock_outline),
       );
   String? loadingVehicle;
@@ -399,20 +432,28 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                   context: context,
                   barrierDismissible: false,
                   builder: (context) => AlertDialog(
-                      title: Text('New request ${requestReference(job)}'),
+                      title: AppText('New request {reference}',
+                          values: {'reference': requestReference(job)}),
                       content: SizedBox(
                           width: 420,
                           child: Column(
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(job['service']),
+                                AppText(job['service']),
                                 const SizedBox(height: 8),
-                                Text(
-                                    'Customer offer: ${num.parse(job['offered_amount'].toString()).toStringAsFixed(0)} Riyal'),
+                                AppText('Customer offer: {amount} Riyal',
+                                    values: {
+                                      'amount': num.parse(
+                                              job['offered_amount'].toString())
+                                          .toStringAsFixed(0)
+                                    }),
                                 const SizedBox(height: 8),
                                 if (job['loading_vehicle'] != null)
-                                  Text('Vehicle: ${job['loading_vehicle']}'),
+                                  AppText('Vehicle: {vehicle}', values: {
+                                    'vehicle':
+                                        tr(context, job['loading_vehicle'])
+                                  }),
                                 const SizedBox(height: 8),
                                 if (job['address'] != null)
                                   Text(job['address']),
@@ -420,7 +461,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                       actions: [
                         TextButton(
                             onPressed: () => Navigator.pop(context),
-                            child: const Text('Later')),
+                            child: const AppText('Later')),
                         FilledButton(
                             onPressed: () async {
                               Navigator.pop(context);
@@ -428,7 +469,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                                 await perform(() => change(job, 'accept'));
                               }
                             },
-                            child: const Text('Accept request'))
+                            child: const AppText('Accept request'))
                       ]),
                 );
               } finally {
@@ -545,17 +586,17 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
       final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-                  title: const Text('Cancel this work?'),
-                  content: Text(operator
+                  title: const AppText('Cancel this work?'),
+                  content: AppText(operator
                       ? 'A 2 Riyal cancellation fee applies. You will be unable to accept new work for 5 hours.'
                       : 'A 2 Riyal cancellation fee applies. You will be unable to make new requests for 3 days.'),
                   actions: [
                     TextButton(
                         onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Keep work')),
+                        child: const AppText('Keep work')),
                     TextButton(
                         onPressed: () => Navigator.pop(context, true),
-                        child: const Text('Cancel work'))
+                        child: const AppText('Cancel work'))
                   ]));
       if (confirmed != true || !mounted) return;
     }
@@ -598,7 +639,6 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
           poll ??= Timer.periodic(const Duration(seconds: 30), (_) {
             if (mounted) setState(() {});
           });
-          if (operator) online = false;
           balance -= 2;
           job.remove('start_otp');
         }
@@ -665,10 +705,10 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
 
   Widget heading(String text) => Padding(
       padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Text(text,
+      child: AppText(text,
           style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800)));
   Widget button(String text, Future<void> Function() action) => FilledButton(
-      onPressed: busy ? null : () => perform(action), child: Text(text));
+      onPressed: busy ? null : () => perform(action), child: AppText(text));
 
   @override
   Widget build(BuildContext context) {
@@ -699,7 +739,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
             automaticallyImplyLeading: false,
             leading: signedIn && !operator && active.isEmpty && !restricted
                 ? IconButton(
-                    tooltip: 'Back',
+                    tooltip: tr(context, 'Back'),
                     icon: const Icon(Icons.arrow_back),
                     onPressed:
                         busy || page == 0 ? null : () => goToPage(page - 1))
@@ -707,25 +747,23 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
             title: Image.asset('assets/buklin-logo.png',
                 height: 48, fit: BoxFit.contain, semanticLabel: 'Buklin'),
             actions: [
+              const LanguageSelector(),
               if (!operator &&
                   active.isEmpty &&
                   !restricted &&
                   !paymentRequired)
                 IconButton(
-                    tooltip: 'Home',
+                    tooltip: tr(context, 'Home'),
                     icon: const Icon(Icons.home_outlined),
                     onPressed: busy
                         ? null
                         : () => returnHomeAfterWork(completed: false)),
               if (live && signedIn)
                 IconButton(
-                    tooltip: 'Sign out',
+                    tooltip: tr(context, 'Sign out'),
                     onPressed: busy
                         ? null
                         : () => perform(() async {
-                              if (operator)
-                                await db.call('PUT', '/availability',
-                                    {'available': false});
                               poll?.cancel();
                               await channel?.cancel();
                               await db.logout();
@@ -754,14 +792,18 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                             Container(
                                 padding: const EdgeInsets.all(12),
                                 color: const Color(0xFFFFE6CD),
-                                child: const Text(
+                                child: const AppText(
                                     'LOCAL DEMO • Requests stay on this device. Switch roles to try accepting work.')),
                           if (!operator)
                             ListTile(
                                 leading: const Icon(Icons.store),
-                                title: Text(
-                                    'Store number: ${accountStoreNumber.isEmpty ? 'Not assigned' : accountStoreNumber}'),
-                                subtitle: Text(accountStoreNumber.isEmpty
+                                title:
+                                    AppText('Store number: {number}', values: {
+                                  'number': accountStoreNumber.isEmpty
+                                      ? tr(context, 'Not assigned')
+                                      : accountStoreNumber
+                                }),
+                                subtitle: AppText(accountStoreNumber.isEmpty
                                     ? 'Contact admin to assign your store number'
                                     : 'Assigned by admin'),
                                 trailing: const Icon(Icons.lock_outline)),
@@ -771,7 +813,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                             Padding(
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 12),
-                                child: Text(message!,
+                                child: AppText(message!,
                                     style: const TextStyle(
                                         color: Color(0xFF9E3400)))),
                           ...[
@@ -782,10 +824,10 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                                       segments: const [
                                         ButtonSegment(
                                             value: false,
-                                            label: Text('Customer')),
+                                            label: AppText('Customer')),
                                         ButtonSegment(
                                             value: true,
-                                            label: Text('Operator'))
+                                            label: AppText('Operator'))
                                       ],
                                       selected: {
                                         operator
@@ -801,21 +843,28 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          Text(
-                                              'Your balance: $availableBalance Riyal',
+                                          AppText(
+                                              'Your balance: {amount} Riyal',
+                                              values: {
+                                                'amount': availableBalance
+                                              },
                                               style: const TextStyle(
                                                   fontSize: 22,
                                                   fontWeight: FontWeight.bold)),
-                                          Text(availableBalance < 0
-                                              ? '${-availableBalance} Riyal to pay'
-                                              : 'Available money'),
-                                          const Text(
+                                          AppText(
+                                              availableBalance < 0
+                                                  ? '{amount} Riyal to pay'
+                                                  : 'Available money',
+                                              values: {
+                                                'amount': -availableBalance
+                                              }),
+                                          const AppText(
                                               '4 Riyal is deducted when each job is completed.'),
                                           if (paymentRequired)
                                             const Padding(
                                                 padding:
                                                     EdgeInsets.only(top: 12),
-                                                child: Text(
+                                                child: AppText(
                                                     'Payment required. Pay your balance to continue using work requests.',
                                                     style: TextStyle(
                                                         color: Colors.red,
@@ -825,8 +874,13 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                             if (restricted)
                               Padding(
                                   padding: const EdgeInsets.all(16),
-                                  child: Text(
-                                      'Work paused after cancellation. You can ${operator ? 'accept work' : 'make new requests'} again after ${restrictionEnd!.toLocal()}.')),
+                                  child: AppText(
+                                      operator
+                                          ? 'Work paused after cancellation. You can accept work again after {time}.'
+                                          : 'Work paused after cancellation. You can make new requests again after {time}.',
+                                      values: {
+                                        'time': restrictionEnd!.toLocal()
+                                      })),
                             if (operator)
                               ...operatorView(active)
                             else if (!restricted && !paymentRequired)
@@ -835,7 +889,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                               heading('Recent work'),
                               const Padding(
                                   padding: EdgeInsets.only(bottom: 12),
-                                  child: Text(
+                                  child: AppText(
                                       'Completed and cancelled requests stay here for 3 days.')),
                               ...jobs.where(visibleInHistory).map(jobCard)
                             ],
@@ -851,7 +905,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
             'Choose loading vehicle',
             'Where is the work?'
           ][page]),
-          Text('Step ${page + 1} of 3'),
+          AppText('Step {step} of 3', values: {'step': page + 1}),
           const SizedBox(height: 12),
           LinearProgressIndicator(value: (page + 1) / 3),
         ],
@@ -870,11 +924,11 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                         child: Image.asset('assets/buklin-logo.png',
                             width: 90, height: 90)),
                     const SizedBox(height: 16),
-                    const Text('HEAVY WORK. MADE EASY.',
+                    const AppText('HEAVY WORK. MADE EASY.',
                         style: TextStyle(
                             color: Color(0xFFFF994F), letterSpacing: 1.5)),
                     const SizedBox(height: 12),
-                    const Text('The right machine.\nRight when you need it.',
+                    const AppText('The right machine.\nRight when you need it.',
                         style: TextStyle(
                             color: Colors.white,
                             fontSize: 28,
@@ -895,9 +949,9 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                               height: 56,
                               fit: BoxFit.contain,
                               excludeFromSemantics: true)),
-                      title: Text(services[i],
+                      title: AppText(services[i],
                           style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text([
+                      subtitle: AppText([
                         'Material handling & site cleanup',
                         'Small loads & local deliveries',
                         'Heavy loads & bulk transport'
@@ -912,14 +966,14 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
         ],
         if (active.isEmpty && page == 1) ...[
           const SizedBox(height: 16),
-          const Text('Select where the material will be loaded.'),
+          const AppText('Select where the material will be loaded.'),
           ...loadingVehicles.map((name) => Card(
               elevation: 0,
               color: loadingVehicle == name
                   ? const Color(0xFFFFE6CD)
                   : Colors.white,
               child: ListTile(
-                  title: Text(name),
+                  title: AppText(name),
                   trailing: Icon(loadingVehicle == name
                       ? Icons.check_circle
                       : Icons.circle_outlined),
@@ -939,12 +993,15 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                 ],
                 maxLength: 3,
                 maxLengthEnforcement: MaxLengthEnforcement.enforced,
-                decoration: const InputDecoration(
-                    labelText: 'Amount you want to give',
+                decoration: InputDecoration(
+                    labelText: tr(context, 'Amount you want to give'),
                     hintText: '250',
-                    suffixText: 'Riyal',
-                    helperText: 'Required • 30–999 Riyal'),
-                validator: amountError,
+                    suffixText: tr(context, 'Riyal'),
+                    helperText: tr(context, 'Required • 30–999 Riyal')),
+                validator: (value) {
+                  final error = amountError(value);
+                  return error == null ? null : tr(context, error);
+                },
               )),
           const SizedBox(height: 12),
           FilledButton(
@@ -953,7 +1010,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                   : () {
                       if (amountForm.currentState!.validate()) goToPage(2);
                     },
-              child: const Text('Next: work location')),
+              child: const AppText('Next: work location')),
         ],
         if (active.isNotEmpty) ...[
           heading('Your work order'),
@@ -962,21 +1019,22 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
         if (active.isEmpty && page == 2) ...[
           Padding(
               padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Text('${services[selected]} • $loadingVehicle')),
+              child: Text(
+                  '${tr(context, services[selected])} • ${tr(context, loadingVehicle ?? '')}')),
           Form(
               key: form,
               child: TextFormField(
                 key: ValueKey(accountStoreNumber),
                 initialValue: accountStoreNumber,
                 readOnly: true,
-                decoration: const InputDecoration(
-                    labelText: 'Store number',
-                    helperText: 'Assigned by admin',
-                    suffixIcon: Icon(Icons.lock_outline)),
-                validator: (value) =>
-                    RegExp(r'^[0-9]{3}$').hasMatch(value ?? '')
-                        ? null
-                        : 'Contact admin to assign your store number',
+                decoration: InputDecoration(
+                    labelText: tr(context, 'Store number'),
+                    helperText: tr(context, 'Assigned by admin'),
+                    suffixIcon: const Icon(Icons.lock_outline)),
+                validator: (value) => RegExp(r'^[0-9]{3}$')
+                        .hasMatch(value ?? '')
+                    ? null
+                    : tr(context, 'Contact admin to assign your store number'),
               )),
           const SizedBox(height: 12),
           fixedLocation(),
@@ -984,7 +1042,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
           button('Search for an operator', request),
           const Padding(
               padding: EdgeInsets.only(top: 8),
-              child: Text(
+              child: AppText(
                   'Your fixed work location assigned by admin is used for every request.')),
         ],
       ];
@@ -1000,16 +1058,18 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
       heading('Ready for your next job?'),
       SwitchListTile(
           contentPadding: EdgeInsets.zero,
-          title: Text(mine.isNotEmpty
-              ? 'Busy • new requests paused'
-              : online
-                  ? 'Online • receiving requests'
-                  : 'You are offline'),
-          subtitle: Text(mine.isNotEmpty
+          title: AppText(!online
+              ? 'You are offline'
+              : restricted || paymentRequired
+                  ? 'Online • new requests paused'
+                  : mine.isNotEmpty
+                      ? 'Busy • new requests paused'
+                      : 'Online • receiving requests'),
+          subtitle: AppText(mine.isNotEmpty
               ? 'Finish your current work to receive new requests.'
-              : 'Receive new work orders when you are available.'),
+              : 'Stay online until you switch this off, including after work finishes.'),
           value: online,
-          onChanged: busy || restricted || paymentRequired
+          onChanged: busy || (!online && (restricted || paymentRequired))
               ? null
               : (v) => perform(() async {
                     if (v && live) {
@@ -1028,26 +1088,26 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                     if (mounted) setState(() => message = result);
                   }),
           icon: const Icon(Icons.notifications_active_outlined),
-          label: const Text('Enable phone work alerts')),
+          label: const AppText('Enable phone work alerts')),
       if (mine.isNotEmpty) ...[
         heading('Your active work'),
         ...mine.map(jobCard)
       ] else if (paymentRequired)
         const Padding(
             padding: EdgeInsets.all(24),
-            child: Text(
+            child: AppText(
                 'Payment required. Pay your balance before receiving new requests.'))
       else if (online && !restricted) ...[
         heading('Incoming requests'),
         if (offers.isEmpty)
           const Padding(
               padding: EdgeInsets.all(24),
-              child: Text('No requests yet. New work will appear here.')),
+              child: AppText('No requests yet. New work will appear here.')),
         ...offers.map(jobCard)
       ] else
         const Padding(
             padding: EdgeInsets.all(24),
-            child: Text('Go online when you are available to accept work.'))
+            child: AppText('Go online when you are available to accept work.'))
     ];
   }
 
@@ -1085,16 +1145,17 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                           fontSize: 16,
                           color: Color(0xFF25313B))),
                   const SizedBox(height: 8),
-                  Text(labels[status] ?? status,
+                  AppText(labels[status] ?? status,
                       style: const TextStyle(
                           color: Color(0xFFBC4F00),
                           fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
-                  Text(j['service'],
+                  AppText(j['service'],
                       style: const TextStyle(
                           fontSize: 21, fontWeight: FontWeight.bold)),
                   if (showPrivateDetails && j['store_number'] != null)
-                    Text('Store number: ${j['store_number']}'),
+                    AppText('Store number: {number}',
+                        values: {'number': j['store_number']}),
                   if (!operator &&
                       ['accepted', 'on_the_way'].contains(status) &&
                       j['start_otp'] != null)
@@ -1103,13 +1164,13 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                         padding: const EdgeInsets.all(16),
                         color: const Color(0xFFFFE6CD),
                         child: Column(children: [
-                          const Text('Start-work OTP'),
+                          const AppText('Start-work OTP'),
                           SelectableText(j['start_otp'],
                               style: const TextStyle(
                                   fontSize: 32,
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: 8)),
-                          const Text(
+                          const AppText(
                               'Share this code with your operator after they arrive.')
                         ])),
                   if (j['loading_vehicle'] != null)
@@ -1123,14 +1184,19 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                         const SizedBox(width: 12),
                       ],
                       Expanded(
-                          child:
-                              Text('Loading vehicle: ${j['loading_vehicle']}')),
+                          child: AppText('Loading vehicle: {vehicle}', values: {
+                        'vehicle': tr(context, j['loading_vehicle'])
+                      })),
                     ]),
                   if (j['offered_amount'] != null)
                     Padding(
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Text(
-                            'Customer offer: ${num.parse(j['offered_amount'].toString()).toStringAsFixed(0)} Riyal',
+                        child: AppText('Customer offer: {amount} Riyal',
+                            values: {
+                              'amount':
+                                  num.parse(j['offered_amount'].toString())
+                                      .toStringAsFixed(0)
+                            },
                             style: const TextStyle(
                                 fontSize: 22, fontWeight: FontWeight.bold))),
                   if (!operator && status == 'requested')
@@ -1139,7 +1205,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                         child: Column(children: [
                           LinearProgressIndicator(),
                           SizedBox(height: 12),
-                          Text(
+                          AppText(
                               'Searching for an available operator… You can cancel while waiting.')
                         ])),
                   if (showPrivateDetails) ...[
@@ -1151,7 +1217,8 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                   if (j['operator_id'] != null)
                     Padding(
                         padding: const EdgeInsets.only(top: 12),
-                        child: Text('Assigned operator: ${j['operator_id']}')),
+                        child: AppText('Assigned operator: {operator}',
+                            values: {'operator': j['operator_id']})),
                   if (operator && j['customer_phone'] != null)
                     Padding(
                         padding: const EdgeInsets.only(top: 12),
@@ -1159,8 +1226,8 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                             onPressed: () => launchUrl(
                                 Uri(scheme: 'tel', path: j['customer_phone'])),
                             icon: const Icon(Icons.call),
-                            label:
-                                Text('Call customer ${j['customer_phone']}'))),
+                            label: AppText('Call customer {phone}',
+                                values: {'phone': j['customer_phone']}))),
                   if (['accepted', 'on_the_way', 'working'].contains(status))
                     WorkLocation(
                         key: ValueKey('${j['id']}-$operator'),
@@ -1180,7 +1247,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                         onPressed: busy
                             ? null
                             : () => perform(() => change(j, 'decline')),
-                        child: const Text('Decline'))
+                        child: const AppText('Decline'))
                   ],
                   if (operator &&
                       j['operator_id'] ==
@@ -1188,7 +1255,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                     if (status == 'accepted')
                       button('Go to work', () => change(j, 'travel')),
                     if (['accepted', 'on_the_way', 'working'].contains(status))
-                      const Text(
+                      const AppText(
                           'New requests are paused during this job. Starting and finishing require arrival within 100 metres.'),
                     if (status == 'on_the_way')
                       button('Start work with OTP', () => startWithOtp(j)),

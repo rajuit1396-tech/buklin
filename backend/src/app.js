@@ -216,7 +216,6 @@ export function createApp(pool, notify=()=>{}, options={}) {
  app.post('/auth/logout',async(req,res)=>{
    await transaction(pool,async c=>{
      await c.query('delete from sessions where token_hash=$1',[tokenHash(req.token)]);
-     await c.query('update users set online=false where id=$1',[req.user.id]);
    });
    notify(); res.json({ok:true});
  });
@@ -299,8 +298,8 @@ export function createApp(pool, notify=()=>{}, options={}) {
       await c.query("update jobs set status='cancelled' where id=$1",[id]);
       await c.query(`insert into work_charges(job_id,user_id,amount) values($1,$2,-2)
         on conflict(job_id,user_id) do nothing`,[id,u.id]);
-      await c.query(`update users set blocked_until=now()+($2 * interval '1 hour'),
-        online=case when role='operator' then false else online end where id=$1`,[u.id,j.customer_id===u.id?72:5]);
+      await c.query(`update users set blocked_until=now()+($2 * interval '1 hour')
+        where id=$1`,[u.id,j.customer_id===u.id?72:5]);
       await c.query('delete from job_start_codes where job_id=$1',[id]);
       return;
     }
