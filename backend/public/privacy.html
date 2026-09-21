@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="How Buklin handles account information, work requests, location data and privacy requests.">
+  <title>Buklin Privacy Policy</title>
+  <link rel="stylesheet" href="/privacy.css">
+</head>
+<body>
+<main>
+  <header>
+    <p class="brand">BUKLIN</p>
+    <h1>Privacy Policy</h1>
+    <p>Last updated: 21 September 2026</p>
+    <p>This policy describes how Buklin, the equipment and transport work-request app
+      (Android package <code>com.torikdammam.buklin</code>), handles personal information.</p>
+  </header>
+
+  <h2>Who operates Buklin and how to contact us</h2>
+  <p>Privacy contact: <strong>Munny Akther Riya</strong>.<br>
+    For privacy questions, corrections or deletion requests, email
+    <a href="mailto:riyab1396f@gmail.com">riyab1396f@gmail.com</a>.</p>
+
+  <h2>Information we collect and why</h2>
+  <ul>
+    <li><strong>Account information:</strong> name, phone number, username, email when provided,
+      account role, assigned equipment, and password hashes. Administrators create accounts.
+      We use this information to sign you in, manage access and arrange work.</li>
+    <li><strong>Work and account records:</strong> requests, work descriptions, equipment and loading
+      choices, offer amounts, status changes, store numbers, site addresses, start codes,
+      balances, charges, payments recorded by administrators and activity records. These support
+      matching, service delivery, account administration and resolving disputes.</li>
+    <li><strong>Location:</strong> saved or selected work-site coordinates and, with device permission,
+      precise GPS location. We use these to locate a work site, show the assigned operator's
+      position to the customer and check arrival before work starts or finishes.</li>
+    <li><strong>Device and connection information:</strong> network requests expose your IP address
+      and basic client information to our hosting and map providers. Authentication tokens and
+      language preferences are stored on your device to support sign-in and your chosen language.</li>
+  </ul>
+
+  <h2>Location sharing and permissions</h2>
+  <p>Operators share their location while the active job-location screen is running. On Android,
+    a visible foreground-service notification can keep this sharing active when you switch
+    apps or turn off the screen. Sharing stops when the job screen closes or the job completes.
+    The latest position can remain stored after live sharing stops. You can revoke location
+    permission in Android settings; features requiring location will then be unavailable.</p>
+  <p>Customers can select a site on a map or use device location to choose it. Account site
+    information may also be entered by an administrator.</p>
+
+  <h2>Who receives information</h2>
+  <ul>
+    <li><strong>Work participants:</strong> eligible operators see available work details. Exact
+      site details and store numbers are provided to the assigned operator after acceptance.
+      Customers can see their assigned operator's shared location.</li>
+    <li><strong>Buklin administrators:</strong> authorized administrators manage accounts,
+      work, balances and service records.</li>
+    <li><strong>Hosting and storage:</strong> Render hosts the service and Neon provides the
+      PostgreSQL database used to process and store app information.</li>
+    <li><strong>Maps:</strong> OpenStreetMap supplies map tiles. Loading a map sends the map
+      area requested, your IP address and client request information to the tile provider.</li>
+    <li><strong>Notifications, when enabled in a configured app version:</strong> OneSignal and
+      Google's Android push infrastructure process push identifiers, a Buklin account identifier,
+      device information and notification content to deliver work alerts. Version 1.0.16 does
+      not configure OneSignal push delivery. Notification permissions can be changed in device settings.</li>
+  </ul>
+  <p>These services may process information in countries other than your own. This app does not
+    include advertising or sell personal information through its app functionality.</p>
+
+  <h2>Storage, security and retention</h2>
+  <p>The hosted app connects to the service using HTTPS. Passwords are stored as hashes, and
+    authenticated access checks restrict account and work information. No method of storage
+    or transmission can guarantee complete security.</p>
+  <p>Account information is kept while the account remains active or until an administrator
+    processes deletion. Completed and cancelled work disappears from customer and operator
+    history after 72 hours; this is a display limit, not automatic deletion from the database.
+    Work records, site information, latest job locations, billing records and activity logs
+    can remain stored for service administration and dispute handling. The current service
+    does not apply a fixed automatic deletion period to these records.</p>
+
+  <h2 id="delete-account">Request account or data deletion</h2>
+  <p>Email <a href="mailto:riyab1396f@gmail.com?subject=Buklin%20account%20deletion">riyab1396f@gmail.com</a>
+    with the subject “Buklin account deletion” and your username or registered phone number.
+    You can also request access to or correction of your information using this address.
+    Do not send your password or work start codes. We may need to verify account ownership.</p>
+  <p>Account deletion is handled by an administrator and removes the account profile, sign-in
+    sessions and account-linked balance entries. It cancels active work and removes account
+    links from work and activity records. Shared work records, site details and last job locations
+    are not automatically erased by that action. Include any request to remove this associated
+    information in your message so it can be reviewed, including any records needed for another
+    participant, an unresolved dispute or a legal obligation. Uninstalling the app does not
+    delete information held by the service.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>Updates will appear on this page with a revised date. Contact us using the address above
+    if you have questions about this policy or how your information is handled.</p>
+</main>
+</body>
+</html>
