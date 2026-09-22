@@ -1,11 +1,19 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val uploadProperties = Properties()
+val uploadPropertiesFile = rootProject.file("key.properties")
+if (uploadPropertiesFile.exists()) {
+    uploadPropertiesFile.inputStream().use { uploadProperties.load(it) }
+}
+
 android {
-    namespace = "com.example.buklin"
+    namespace = "com.torikdammam.buklin"
     compileSdk = flutter.compileSdkVersion
 
     compileOptions {
@@ -14,11 +22,9 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.buklin"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        applicationId = "com.torikdammam.buklin"
+        // Android 7.0 is the oldest version supported by our Flutter SDK.
+        minSdk = 24
         targetSdk = flutter.targetSdkVersion
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
@@ -28,12 +34,29 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (uploadPropertiesFile.exists()) {
+            create("upload") {
+                storeFile = rootProject.file(requireNotNull(uploadProperties.getProperty("storeFile")))
+                storePassword = requireNotNull(uploadProperties.getProperty("storePassword"))
+                keyAlias = requireNotNull(uploadProperties.getProperty("keyAlias"))
+                keyPassword = requireNotNull(uploadProperties.getProperty("keyPassword"))
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("upload")
         }
+    }
+}
+
+// Never produce a release artifact with the development signing key.
+gradle.taskGraph.whenReady {
+    if (allTasks.any { it.project == project && it.name.contains("Release") } &&
+        !uploadPropertiesFile.exists()) {
+        throw GradleException("Release signing is missing. Configure android/key.properties; see PLAY_STORE.md.")
     }
 }
 
