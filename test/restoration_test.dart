@@ -42,6 +42,8 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     await tester.pumpWidget(MaterialApp(home: WorkApp(preferences: prefs)));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Work in progress'), 150,
+        scrollable: find.byType(Scrollable).first);
     expect(find.text('Work in progress'), findsOneWidget);
     expect(find.text('Step 3 of 3'), findsNothing);
     await tester.pumpWidget(const SizedBox());

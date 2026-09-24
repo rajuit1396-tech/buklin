@@ -43,6 +43,10 @@ export function createApp(pool, notify=()=>{}, options={}) {
  const origins=(process.env.CORS_ORIGINS ?? 'http://localhost:8082').split(',');
  app.use(cors({origin:(origin,done)=>done(null,!origin || origins.includes(origin))}));
  app.use(express.json({limit:'16kb'}));
+ app.get('/downloads/buklin.apk', (_req,res) => {
+   res.set('Cache-Control','no-store');
+   res.download(fileURLToPath(new URL('../public/downloads/buklin.apk',import.meta.url)), 'buklin.apk');
+ });
  app.use(express.static(publicDirectory));
  if (!options.testing) app.use(rateLimit({windowMs:60000,limit:180}));
  const authLimit=options.testing ? (_q,_s,n)=>n() : rateLimit({windowMs:15*60000,limit:20});

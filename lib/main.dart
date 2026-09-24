@@ -277,6 +277,14 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
   static const loadingVehicles = ['Dyna', 'Trailer', 'Inside store'];
   String get accountStoreNumber =>
       live ? (db.user?['store_number']?.toString() ?? '') : '007';
+  String get accountUsername {
+    if (!live) return operator ? 'demo-operator' : 'demo-customer';
+    for (final field in ['username', 'email', 'name']) {
+      final value = db.user?[field]?.toString().trim() ?? '';
+      if (value.isNotEmpty) return value;
+    }
+    return tr(context, 'Not assigned');
+  }
   double? get accountLatitude =>
       live ? (db.user?['site_lat'] as num?)?.toDouble() : 24.5;
   double? get accountLongitude =>
@@ -788,6 +796,16 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                         controller: scroll,
                         padding: const EdgeInsets.all(20),
                         children: [
+                          ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const CircleAvatar(
+                                  child: Icon(Icons.person_outline)),
+                              title: Text(accountUsername,
+                                  style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w700)),
+                              subtitle: AppText(
+                                  operator ? 'Operator' : 'Customer')),
                           if (!live)
                             Container(
                                 padding: const EdgeInsets.all(12),
