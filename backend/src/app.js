@@ -362,7 +362,7 @@ export function createApp(pool, notify=()=>{}, options={}) {
     }
     await c.query('update jobs set status=$1 where id=$2',[to,id]);
     if(action==='complete') {
-      await c.query(`insert into work_charges(job_id,user_id,amount) values($1,$2,-4),($1,$3,-4)
+      await c.query(`insert into work_charges(job_id,user_id,amount) values($1,$2,-3),($1,$3,-3)
         on conflict(job_id,user_id) do nothing`,[id,j.customer_id,j.operator_id]);
     }
    });

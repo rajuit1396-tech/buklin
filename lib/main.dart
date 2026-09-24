@@ -338,7 +338,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
   int balance = 0;
   int get availableBalance => live
       ? balance
-      : balance - 4 * jobs.where((j) => j['status'] == 'completed').length;
+      : balance - 3 * jobs.where((j) => j['status'] == 'completed').length;
   bool get paymentRequired => availableBalance <= -20;
   DateTime? blockedUntil;
   final demoBlocks = <bool, DateTime>{};
@@ -859,7 +859,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                                                 'amount': -availableBalance
                                               }),
                                           const AppText(
-                                              '4 Riyal is deducted when each job is completed.'),
+                                              '3 Riyal is deducted when each job is completed.'),
                                           if (paymentRequired)
                                             const Padding(
                                                 padding:

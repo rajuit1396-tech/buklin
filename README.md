@@ -12,7 +12,9 @@ For hosted deployment of the login app and API, see [RENDER.md](RENDER.md).
 C:\flutter\bin\flutter.bat run -d chrome --web-port 8082
 ```
 
-Without BACKEND_URL the app runs the labeled, in-memory customer/operator demo.
+Without BACKEND_URL the app connects to https://www.buklin.online and shows
+the customer/operator login panel. To explicitly launch the offline demo, add
+`--dart-define=BACKEND_URL=` to the run command.
 
 Use the language icon on the sign-in or work screen to choose English,
 Bengali (বাংলা), Urdu (اردو), or Hindi (हिन्दी). The app remembers this choice
@@ -117,7 +119,9 @@ npm test
 Backend tests use embedded Postgres (PGlite), exercising authentication, required
 fields, private-data filtering, competing acceptance, state transitions, locations,
 and logout. Run a real Neon concurrency/load test before production deployment.
-Flutter checks: `flutter test` and `flutter analyze`.
+Flutter checks: `flutter test --dart-define=BACKEND_URL=` for the offline demo
+suite, `flutter test test/login_startup_test.dart` for the default login flow,
+and `flutter analyze`.
 
 No Neon connection string was supplied, so hosted database migration, deployment,
 and a full two-device test have not been performed. Existing Supabase accounts/data

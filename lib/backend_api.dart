@@ -4,7 +4,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-const backendUrl = String.fromEnvironment('BACKEND_URL');
+// Normal launches use the live login flow. An explicitly empty URL opts into demo.
+const backendUrl = String.fromEnvironment('BACKEND_URL',
+    defaultValue: 'https://www.buklin.online');
 class ApiException implements Exception {
   const ApiException(this.message, [this.statusCode]);
   final String message;

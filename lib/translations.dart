@@ -264,10 +264,10 @@ const translations = <String, List<String>>{
     '{amount} रियाल चुकाने हैं'
   ],
   'Available money': ['উপলব্ধ টাকা', 'دستیاب رقم', 'उपलब्ध राशि'],
-  '4 Riyal is deducted when each job is completed.': [
-    'প্রতিটি কাজ শেষে ৪ রিয়াল কাটা হয়।',
-    'ہر کام مکمل ہونے پر 4 ریال کاٹے جاتے ہیں۔',
-    'हर काम पूरा होने पर 4 रियाल काटे जाते हैं।'
+  '3 Riyal is deducted when each job is completed.': [
+    'প্রতিটি কাজ শেষে ৩ রিয়াল কাটা হয়।',
+    'ہر کام مکمل ہونے پر 3 ریال کاٹے جاتے ہیں۔',
+    'हर काम पूरा होने पर 3 रियाल काटे जाते हैं।'
   ],
   'Payment required. Pay your balance to continue using work requests.': [
     'পেমেন্ট প্রয়োজন। কাজের অনুরোধ চালু রাখতে বকেয়া পরিশোধ করুন।',

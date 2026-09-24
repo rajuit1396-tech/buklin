@@ -27,6 +27,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   InputDecoration field(String label, IconData icon) => InputDecoration(
       labelText: tr(context, label),
+      floatingLabelBehavior: FloatingLabelBehavior.always,
+      labelStyle: const TextStyle(color: Color(0xFF25313B)),
       prefixIcon: Icon(icon, size: 21, color: const Color(0xFF78828A)),
       filled: true,
       fillColor: Colors.white,
@@ -174,6 +176,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                         const SizedBox(height: 14),
                                         TextField(
                                             controller: widget.username,
+                                            style: const TextStyle(
+                                                color: Color(0xFF1B242C)),
                                             enabled: !widget.busy,
                                             autofillHints: const [
                                               AutofillHints.username
@@ -188,6 +192,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                         const SizedBox(height: 16),
                                         TextField(
                                             controller: widget.password,
+                                            style: const TextStyle(
+                                                color: Color(0xFF1B242C)),
                                             enabled: !widget.busy,
                                             obscureText: hidePassword,
                                             autofillHints: const [
