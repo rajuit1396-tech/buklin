@@ -91,7 +91,7 @@ class _SitePickerState extends State<SitePicker> {
                         TileLayer(
                             urlTemplate:
                                 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                            userAgentPackageName: 'com.example.buklin'),
+                            userAgentPackageName: 'com.torikdammam.buklin'),
                         RichAttributionWidget(attributions: [
                           TextSourceAttribution('OpenStreetMap contributors',
                               onTap: () => launchUrl(Uri.parse(

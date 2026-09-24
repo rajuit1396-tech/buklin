@@ -2,8 +2,8 @@
 
 ## Existing service: buklin-1
 
-The existing service serves the admin panel at https://buklin-1.onrender.com/
-and the customer/operator app at https://buklin-1.onrender.com/app/.
+The existing service serves the admin panel at https://www.buklin.online/
+and the customer/operator app at https://www.buklin.online/app/.
 The production Flutter bundle is committed in `backend/public/app/` so the
 existing Node service can deploy it without installing Flutter on Render.
 After Flutter source changes, run `scripts/package-render-app.ps1`, then commit

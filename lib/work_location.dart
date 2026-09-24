@@ -217,7 +217,7 @@ class _WorkLocationState extends State<WorkLocation> {
                   TileLayer(
                       urlTemplate:
                           'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.example.buklin'),
+                      userAgentPackageName: 'com.torikdammam.buklin'),
                   MarkerLayer(markers: [
                     Marker(
                         point: target,
