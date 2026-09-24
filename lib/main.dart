@@ -285,6 +285,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
     }
     return tr(context, 'Not assigned');
   }
+
   double? get accountLatitude =>
       live ? (db.user?['site_lat'] as num?)?.toDouble() : 24.5;
   double? get accountLongitude =>
@@ -796,16 +797,53 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                         controller: scroll,
                         padding: const EdgeInsets.all(20),
                         children: [
-                          ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const CircleAvatar(
-                                  child: Icon(Icons.person_outline)),
-                              title: Text(accountUsername,
-                                  style: const TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w700)),
-                              subtitle: AppText(
-                                  operator ? 'Operator' : 'Customer')),
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 16),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .primaryContainer,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(children: [
+                              CircleAvatar(
+                                radius: 24,
+                                backgroundColor:
+                                    Theme.of(context).colorScheme.primary,
+                                foregroundColor:
+                                    Theme.of(context).colorScheme.onPrimary,
+                                child: Icon(operator
+                                    ? Icons.engineering_outlined
+                                    : Icons.person_outline),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    AppText(operator ? 'Operator' : 'Customer',
+                                        style: TextStyle(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onPrimaryContainer,
+                                          fontWeight: FontWeight.w500,
+                                        )),
+                                    const SizedBox(height: 4),
+                                    Text(accountUsername,
+                                        softWrap: true,
+                                        style: TextStyle(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onPrimaryContainer,
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.w700,
+                                        )),
+                                  ],
+                                ),
+                              ),
+                            ]),
+                          ),
                           if (!live)
                             Container(
                                 padding: const EdgeInsets.all(12),

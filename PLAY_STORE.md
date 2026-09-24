@@ -1,5 +1,19 @@
 # Buklin Android release
 
+## Latest direct-install release
+
+Version 1.0.18 (build 19) adds styled username cards for customers and operators.
+The signed universal APK is `output/buklin-1.0.18.apk`, also published through
+`backend/public/downloads/buklin.apk`. It connects to https://www.buklin.online
+and includes ARM 32-bit, ARM 64-bit and x86_64 for Android 7.0 and later.
+Build it with:
+
+```powershell
+flutter build apk --release --target-platform android-arm,android-arm64,android-x64 --dart-define=BACKEND_URL=https://www.buklin.online
+```
+
+The bundle and release files described below refer to the earlier 1.0.17 release.
+
 ## Phone compatibility
 
 Minimum Android version: Android 7.0 (API 24), the minimum supported by the
