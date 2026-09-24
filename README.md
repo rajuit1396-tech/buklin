@@ -154,6 +154,10 @@ Sign in with that username and password in the live app. The admin panel can:
 - Assign operators exactly one machine: 5-finger excavator grapple, Pickup van, or Big truck.
 - Create customers without machine assignment.
 - List and search registered customer/operator accounts (up to 100 per search).
+- Change any customer or operator login password using **Change password** on
+  their account. Enter and confirm a new password of 10–128 characters. Existing
+  sessions are revoked, and the change is recorded without storing the password
+  in the activity log. Share the new password privately with the account owner.
 
 Passwords are hashed server-side and never returned in account listings. Usernames
 are unique and case-insensitive, using 3–40 letters, numbers or underscores. Phone

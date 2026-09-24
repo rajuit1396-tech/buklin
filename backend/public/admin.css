@@ -9,3 +9,7 @@
 #locationMap{height:320px;border-radius:10px;background:#26343b}
 #locationSummary{margin:8px 0 0;font-size:.85rem;overflow-wrap:anywhere}
 #locationError{color:var(--bad);margin:0}
+#passwordDialog{width:min(460px,95vw);max-height:90vh;overflow:auto;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:16px;padding:20px}
+#passwordDialog::backdrop{background:#0009}
+#passwordDialog h2,#passwordDialog p{margin:0;overflow-wrap:anywhere}
+#passwordError{color:var(--bad)}

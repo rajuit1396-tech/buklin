@@ -53,7 +53,7 @@
         </section>
 
         <section class="card accounts-card">
-          <div class="section-title"><div><h2>Customer and operator accounts</h2><p>Manage balances, restrictions, work history, and accounts.</p></div></div>
+          <div class="section-title"><div><h2>Customer and operator accounts</h2><p>Manage passwords, balances, restrictions, work history, and accounts.</p></div></div>
           <form id="searchForm" class="search"><input id="searchInput" aria-label="Search accounts" placeholder="Name, username, phone or email"><button type="submit" class="ghost">Search</button></form>
           <div id="accounts" class="accounts"></div>
         </section>
@@ -61,6 +61,18 @@
     </section>
     <p id="message" class="message" role="status" aria-live="polite"></p>
   </main>
+  <dialog id="passwordDialog" aria-labelledby="passwordHeading">
+    <form id="passwordForm">
+      <h2 id="passwordHeading">Change login password</h2>
+      <p id="passwordAccount"></p>
+      <p>Use 10–128 characters. The account will need to sign in again with the new password.</p>
+      <label>New password<input id="newPassword" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label>
+      <label>Confirm new password<input id="confirmPassword" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label>
+      <p id="passwordError" role="alert"></p>
+      <button id="savePasswordButton" type="submit">Change password</button>
+      <button id="cancelPasswordButton" class="ghost" type="button">Cancel</button>
+    </form>
+  </dialog>
   <dialog id="locationDialog">
     <form id="locationForm">
       <h2>Choose exact customer location</h2>

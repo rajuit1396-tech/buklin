@@ -50,7 +50,11 @@ export function createApp(pool, notify=()=>{}, options={}) {
  app.get('/health',async (_req,res)=>{ await pool.query('select 1'); res.json({ok:true}); });
  async function session(res,user) {
    const token=randomBytes(32).toString('hex');
-   await pool.query("insert into sessions values($1,$2,now()+interval '7 days')",[tokenHash(token),user.id]);
+   await transaction(pool,async c=>{
+     const current=await c.query('select password_hash from users where id=$1 and deleted_at is null for update',[user.id]);
+     if(current.rows[0]?.password_hash!==user.password_hash) fail(401,'Please sign in again');
+     await c.query("insert into sessions values($1,$2,now()+interval '7 days')",[tokenHash(token),user.id]);
+   });
    res.json({token,user:{id:user.id,email:user.email,name:user.name,phone:user.phone,username:user.username,
      role:user.role,service:user.service,store_number:user.store_number,site_lat:user.site_lat,site_lng:user.site_lng,site_address:user.site_address,online:user.online}});
  }
@@ -87,6 +91,20 @@ export function createApp(pool, notify=()=>{}, options={}) {
      (coalesce(name,'') ilike $1 or coalesce(username,'') ilike $1 or coalesce(phone,'') ilike $1 or coalesce(email,'') ilike $1)
      order by (deleted_at is not null),coalesce(name,username,email),id limit 101 offset $2`,['%'+search+'%',offset]);
    res.json({users:rows.slice(0,100),has_more:rows.length>100});
+ });
+ app.post('/admin/users/:id/password',authLimit,async(req,res)=>{
+   const id=z.uuid().parse(req.params.id);
+   const {password}=z.object({password:z.string().min(10).max(128)}).parse(req.body);
+   const hash=await hashPassword(password);
+   await transaction(pool,async c=>{
+     const result=await c.query(`update users set password_hash=$2
+       where id=$1 and role in ('customer','operator') and deleted_at is null returning id`,[id,hash]);
+     if(!result.rowCount) fail(404,'Account unavailable');
+     await c.query('delete from sessions where user_id=$1',[id]);
+     await c.query('insert into activity_log(user_id,description) values($1,$2)',
+       [id,'Password changed by admin '+req.user.id]);
+   });
+   notify();res.json({ok:true});
  });
  app.get('/admin/dashboard',async(req,res)=>{
    const offset=z.coerce.number().int().min(0).max(10000000).parse(req.query.offset ?? 0);

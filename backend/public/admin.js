@@ -3,6 +3,7 @@ const loginView=byId('loginView'),panelView=byId('panelView'),message=byId('mess
 let token=sessionStorage.getItem('buklinAdminToken')||'';
 let messageTimer;
 let customerLocation=null;
+let passwordAccount=null;
 
 function notice(text,error=false){
   clearTimeout(messageTimer);message.textContent=text;message.className=`message show ${error?'error':'success'}`;
@@ -29,10 +30,33 @@ function accountRow(user){
   if(!user.deleted_at&&user.role==='customer'&&!user.store_number) actions.append(actionButton('Assign store number',async()=>{const store_number=prompt('Assign a permanent three-digit store number (for example 007):');if(store_number===null)return;if(!/^[0-9]{3}$/.test(store_number)){notice('Enter exactly three digits.',true);return;}try{await api(`/admin/users/${user.id}/store-number`,{method:'POST',body:JSON.stringify({store_number})});notice('Store number assigned.');await refresh();}catch(error){notice(error.message,true);}}));
   if(!user.deleted_at){const payment=actionButton('Add payment',()=>adjustBalance(user,'payment'));const adjust=actionButton('Adjust',()=>adjustBalance(user,'adjustment'));const set=actionButton('Set balance',()=>setBalance(user));actions.prepend(payment,adjust,set);
     if(user.blocked_until){const clear=document.createElement('button');clear.type='button';clear.className='ghost';clear.textContent='Clear restriction';clear.addEventListener('click',()=>clearRestriction(user));actions.append(clear);}
+    actions.append(actionButton('Change password',()=>openPasswordDialog(user)));
     const remove=actionButton('Delete account',()=>deleteAccount(user));remove.classList.add('danger');actions.append(remove);}
   row.append(info,actions);return row;
 }
 function actionButton(label,handler){const button=document.createElement('button');button.type='button';button.className='ghost';button.textContent=label;button.addEventListener('click',handler);return button;}
+function openPasswordDialog(user){
+  passwordAccount=user;byId('passwordForm').reset();byId('passwordError').textContent='';
+  byId('passwordAccount').textContent=`${user.name} (${user.role}) — ${user.username?'@'+user.username:user.email}`;
+  byId('passwordDialog').showModal();byId('newPassword').focus();
+}
+function closePasswordDialog(){byId('passwordForm').reset();byId('passwordDialog').close();}
+byId('cancelPasswordButton').addEventListener('click',closePasswordDialog);
+byId('passwordDialog').addEventListener('cancel',event=>{if(byId('savePasswordButton').disabled)event.preventDefault();});
+byId('passwordDialog').addEventListener('close',()=>{byId('passwordForm').reset();passwordAccount=null;byId('passwordError').textContent='';});
+byId('passwordForm').addEventListener('submit',async event=>{
+  event.preventDefault();const button=byId('savePasswordButton'),cancel=byId('cancelPasswordButton');
+  if(button.disabled||!passwordAccount)return;
+  const password=byId('newPassword').value;byId('passwordError').textContent='';
+  if(password.length<10||password.length>128){byId('passwordError').textContent='Use 10–128 characters.';return;}
+  if(password!==byId('confirmPassword').value){byId('passwordError').textContent='Passwords do not match.';return;}
+  button.disabled=true;cancel.disabled=true;button.textContent='Changing password...';
+  try{
+    await api(`/admin/users/${passwordAccount.id}/password`,{method:'POST',body:JSON.stringify({password})});
+    closePasswordDialog();notice('Password changed. The account can sign in with the new password.');
+  }catch(error){byId('passwordError').textContent=error.message;}
+  finally{button.disabled=false;cancel.disabled=false;button.textContent='Change password';}
+});
 async function refresh(){
   try{const search=byId('searchInput').value.trim();const [dashboard,accounts]=await Promise.all([api('/admin/dashboard'),api(`/admin/users?search=${encodeURIComponent(search)}`)]);
     const totals=byId('totals');totals.replaceChildren(stat('Customers',dashboard.totals.customers),stat('Operators',dashboard.totals.operators),stat('Operators online',dashboard.totals.online_operators),stat('Customer requests',dashboard.totals.total_requests),stat('Waiting requests',dashboard.totals.waiting_requests),stat('Active jobs',dashboard.totals.active_jobs),stat('Completed work',dashboard.totals.completed_jobs),stat('Work fees',dashboard.totals.fees),stat('Payments received',dashboard.totals.received),stat('Amount owed',dashboard.totals.owed),stat('Account credit',dashboard.totals.credit));
