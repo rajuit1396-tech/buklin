@@ -20,6 +20,8 @@ const serviceImages = [
   'assets/truck.png'
 ];
 const live = backendUrl != '';
+const connectionWarning =
+    'Connection interrupted. Retrying; shown requests may be out of date.';
 
 String requestReference(Map<String, dynamic> job) =>
     '#BK-${job['request_number'] ?? job['id']}';
@@ -275,6 +277,11 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
   final offeredAmount = TextEditingController();
   final latitude = TextEditingController(), longitude = TextEditingController();
   static const loadingVehicles = ['Dyna', 'Trailer', 'Inside store'];
+  String get accountUsername => live
+      ? (db.user?['username']?.toString().trim() ?? '')
+      : operator
+          ? 'demo_operator'
+          : 'demo_customer';
   String get accountStoreNumber =>
       live ? (db.user?['store_number']?.toString() ?? '') : '007';
   double? get accountLatitude =>
@@ -396,6 +403,7 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
           balance = (result['balance'] as num?)?.toInt() ?? 0;
           blockedUntil =
               DateTime.tryParse(result['blocked_until']?.toString() ?? '');
+          if (message == connectionWarning) message = null;
         });
         WorkAlerts.retainIncomingRequests(operator && online
             ? jobs
@@ -495,13 +503,12 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
             db.user = null;
             message = 'Please sign in again to restore your work.';
           });
-      } else if (mounted) {
+      } else if (mounted && db.token == session) {
         setState(() => message = e.message);
       }
     } catch (_) {
-      if (mounted)
-        setState(() => message =
-            'Connection interrupted. Retrying; shown requests may be out of date.');
+      if (mounted && db.token == session)
+        setState(() => message = connectionWarning);
     } finally {
       refreshing = false;
     }
@@ -794,6 +801,14 @@ class _WorkAppState extends State<WorkApp> with WidgetsBindingObserver {
                                 color: const Color(0xFFFFE6CD),
                                 child: const AppText(
                                     'LOCAL DEMO • Requests stay on this device. Switch roles to try accepting work.')),
+                          ListTile(
+                              leading:
+                                  const Icon(Icons.account_circle_outlined),
+                              title: Text(accountUsername.isEmpty
+                                  ? tr(context, 'Not assigned')
+                                  : accountUsername),
+                              subtitle:
+                                  AppText(operator ? 'Operator' : 'Customer')),
                           if (!operator)
                             ListTile(
                                 leading: const Icon(Icons.store),
